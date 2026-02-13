@@ -1,0 +1,18 @@
+COPY THIS CONTENT TO: simplified_backend\.env
+==============================================
+
+DB_HOST=localhost
+DB_USER=root
+DB_PASSWORD=
+DB_NAME=queueup_db
+
+GOOGLE_API_KEY=
+
+SECRET_KEY=my-secret-key-change-this
+
+==============================================
+INSTRUCTIONS:
+1. Create a new file named .env (with the dot) in the simplified_backend folder
+2. Copy and paste the content above
+3. If you have a Google Gemini API key, paste it into GOOGLE_API_KEY
+   (Get one from: https://aistudio.google.com/app/apikey)
