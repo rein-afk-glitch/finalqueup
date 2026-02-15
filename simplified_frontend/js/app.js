@@ -2,18 +2,19 @@
 // This allows access from phones/tablets on the same network
 const getApiBase = () => {
     const hostname = window.location.hostname;
-    // If opened as a local file (file://), hostname can be empty.
-    // Fall back to localhost in that case.
+    const protocol = window.location.protocol;
+    
     if (!hostname) {
-        return 'http://localhost:5001/api';
+        return `${protocol}//localhost:5001/api`;
     }
-    // If accessing via localhost or 127.0.0.1, use localhost
+    
     if (hostname === 'localhost' || hostname === '127.0.0.1') {
-        return 'http://localhost:5001/api';
+        return `${protocol}//localhost:5001/api`;
     }
-    // Otherwise, use the same hostname (for network access)
-    return `http://${hostname}:5001/api`;
+    
+    return `${protocol}//${hostname}/api`;
 };
+
 
 const API_BASE = getApiBase();
 
