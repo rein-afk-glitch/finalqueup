@@ -1,0 +1,1 @@
+{"build":{"builder":"NIXPACKS"},"deploy":{"startCommand":"cd simplified_backend && gunicorn app:app"}}
