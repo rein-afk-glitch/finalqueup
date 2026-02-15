@@ -14,7 +14,7 @@ import google.generativeai as genai
 import base64
 from io import BytesIO
 from PIL import Image
-
+from flask import send_from_directory
 # Load environment variables
 load_dotenv()
 
@@ -1125,6 +1125,14 @@ def delete_user(user_id):
 @app.route('/api/health', methods=['GET'])
 def health_check():
     return jsonify({'status': 'healthy', 'timestamp': datetime.now().isoformat()}), 200
+# Serve frontend files
+@app.route('/')
+def serve_frontend():
+    return send_from_directory('../simplified_frontend', 'index.html')
+
+@app.route('/<path:path>')
+def serve_static(path):
+    return send_from_directory('../simplified_frontend', path)
 
 if __name__ == '__main__':
     os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
