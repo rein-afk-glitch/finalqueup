@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify, session
+from flask import send_from_directoryfrom flask import Flask, request, jsonify, session
 from flask_cors import CORS
 import mysql.connector
 from mysql.connector import pooling
@@ -14,7 +14,7 @@ import google.generativeai as genai
 import base64
 from io import BytesIO
 from PIL import Image
-from flask import send_from_directory
+
 # Load environment variables
 load_dotenv()
 
@@ -22,9 +22,6 @@ app = Flask(__name__)
 app.secret_key = os.getenv('SECRET_KEY', 'your-secret-key-change-in-production')
 app.config['UPLOAD_FOLDER'] = 'uploads'
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
-# Session cookie security for production HTTPS (Railway, etc.)
-app.config['SESSION_COOKIE_SECURE'] = os.getenv('SESSION_COOKIE_SECURE', 'false').lower() == 'true'
-app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
 
 # Static admin credentials (first admin)
 STATIC_ADMIN_EMAIL = 'admin'
@@ -56,23 +53,15 @@ ADMIN_SERVICE_ENUM = ", ".join([f"'{service}'" for service in ADMIN_SERVICE_TYPE
 
 # CORS configuration
 # NOTE: Because we use cookie-based sessions (`credentials: 'include'` on the frontend),
-# we should NOT use wildcard '*' with credentials. Instead, allow specific origins.
-# CORS_ORIGINS env var: comma-separated list for production (e.g. https://yourapp.railway.app)
-_DEFAULT_ORIGINS = [
+# we should NOT use wildcard '*' with credentials. Instead, allow local + private LAN hosts.
+_ALLOWED_ORIGINS = [
     r"http://localhost:8080",
     r"http://127\.0\.0\.1:8080",
-    r"http://localhost:5000",
-    r"http://127\.0\.0\.1:5000",
-    r"http://localhost:5001",
-    r"http://127\.0\.0\.1:5001",
-    r"https?://[a-zA-Z0-9.-]+\.railway\.app",
-    r"https?://[a-zA-Z0-9.-]+\.up\.railway\.app",
-    r"http://192\.168\.\d+\.\d+(:\d+)?",
-    r"http://10\.\d+\.\d+\.\d+(:\d+)?",
-    r"http://172\.(1[6-9]|2\d|3[0-1])\.\d+\.\d+(:\d+)?",
+    # Private LAN ranges commonly used for Wi‑Fi
+    r"http://192\.168\.\d+\.\d+:8080",
+    r"http://10\.\d+\.\d+\.\d+:8080",
+    r"http://172\.(1[6-9]|2\d|3[0-1])\.\d+\.\d+:8080",
 ]
-_cors_env = os.getenv('CORS_ORIGINS', '').strip()
-_ALLOWED_ORIGINS = [o.strip() for o in _cors_env.split(',') if o.strip()] if _cors_env else _DEFAULT_ORIGINS
 
 CORS(
     app,
@@ -1136,14 +1125,6 @@ def delete_user(user_id):
 @app.route('/api/health', methods=['GET'])
 def health_check():
     return jsonify({'status': 'healthy', 'timestamp': datetime.now().isoformat()}), 200
-# Serve frontend files
-@app.route('/')
-def serve_frontend():
-    return send_from_directory('../simplified_frontend', 'index.html')
-
-@app.route('/<path:path>')
-def serve_static(path):
-    return send_from_directory('../simplified_frontend', path)
 
 if __name__ == '__main__':
     os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)

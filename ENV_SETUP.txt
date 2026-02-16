@@ -16,3 +16,17 @@ INSTRUCTIONS:
 2. Copy and paste the content above
 3. If you have a Google Gemini API key, paste it into GOOGLE_API_KEY
    (Get one from: https://aistudio.google.com/app/apikey)
+
+==============================================
+RAILWAY DEPLOYMENT - ADD THESE IN RAILWAY DASHBOARD:
+==============================================
+DB_HOST=<your-mysql-host>
+DB_USER=<your-mysql-user>
+DB_PASSWORD=<your-mysql-password>
+DB_NAME=<your-database-name>
+
+SECRET_KEY=<generate-a-strong-random-secret>
+SESSION_COOKIE_SECURE=true
+
+# Optional: if CORS still blocks, add your exact app URL:
+# CORS_ORIGINS=https://yourapp.up.railway.app
