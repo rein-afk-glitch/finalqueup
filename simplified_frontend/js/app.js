@@ -748,6 +748,23 @@ function displayNowServing(data) {
     });
 }
 
+// When user is waiting: show only their queue's Now Serving. When done: show all.
+function updateNowServingVisibility(myQueue) {
+    const cols = document.querySelectorAll('.now-serving-col');
+    const filterBtns = document.querySelector('.now-serving-filters');
+    const showAll = !myQueue || myQueue.status !== 'waiting';
+
+    cols.forEach((col) => {
+        const service = col.dataset.service;
+        const isMyService = service === myQueue?.service_type;
+        col.classList.toggle('d-none', !showAll && !isMyService);
+    });
+
+    if (filterBtns) {
+        filterBtns.classList.toggle('d-none', !showAll);
+    }
+}
+
 // Load my queue
 async function loadMyQueue() {
     try {
@@ -767,9 +784,10 @@ async function loadMyQueue() {
 // Display my queue
 function displayMyQueue(queue) {
     const statusDiv = document.getElementById('my-queue-status');
-    
+    updateNowServingVisibility(queue);
+
     if (!queue) {
-        statusDiv.innerHTML = '<div class="alert alert-info">No active queue</div>';
+        if (statusDiv) statusDiv.innerHTML = '<div class="alert alert-info">No active queue</div>';
         return;
     }
     
