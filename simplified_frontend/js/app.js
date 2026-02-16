@@ -26,6 +26,7 @@ let statsPollInterval = null;
 let nowServingPollInterval = null;
 let hasNotifiedFiveAway = false;
 let lastNotifiedQueueId = null;
+let analyticsCharts = { numbersServed: null, avgServiceTime: null, peakHours: null };
 
 const SERVICE_TYPES = [
     'submission_of_application_forms',
@@ -140,7 +141,18 @@ function setupEventListeners() {
         createAdminForm.addEventListener('submit', handleCreateAdmin);
     }
 
-
+    // Analytics tab and period
+    const analyticsTabEl = document.getElementById('analytics-tab');
+    const analyticsPanelEl = document.getElementById('analytics-panel');
+    if (analyticsTabEl && analyticsPanelEl) {
+        document.getElementById('admin-tabs')?.addEventListener('shown.bs.tab', (e) => {
+            if (e.target.id === 'analytics-tab') loadAdminAnalytics();
+        });
+        const periodSelect = document.getElementById('analytics-period');
+        if (periodSelect) {
+            periodSelect.addEventListener('change', loadAdminAnalytics);
+        }
+    }
     
     // Join queue form
     document.getElementById('join-queue-form').addEventListener('submit', handleJoinQueue);
@@ -382,9 +394,13 @@ function configureAdminView() {
     const adminStatsRow = document.getElementById('admin-stats-row');
     const queueTab = document.getElementById('queue-tab');
     const queuePanel = document.getElementById('queue-panel');
+    const analyticsTab = document.getElementById('analytics-tab');
+    const analyticsPanel = document.getElementById('analytics-panel');
     if (isStaticAdmin()) {
         if (adminManagementTab) adminManagementTab.classList.remove('d-none');
         if (adminManagementSection) adminManagementSection.classList.remove('d-none');
+        if (analyticsTab) analyticsTab.classList.remove('d-none');
+        if (analyticsPanel) analyticsPanel.classList.remove('d-none');
         if (adminStatsRow) adminStatsRow.classList.add('d-none');
         if (queueTab) queueTab.classList.add('d-none');
         if (queuePanel) queuePanel.classList.add('d-none');
@@ -401,6 +417,8 @@ function configureAdminView() {
     } else {
         if (adminManagementTab) adminManagementTab.classList.add('d-none');
         if (adminManagementSection) adminManagementSection.classList.add('d-none');
+        if (analyticsTab) analyticsTab.classList.add('d-none');
+        if (analyticsPanel) analyticsPanel.classList.add('d-none');
         if (adminStatsRow) adminStatsRow.classList.remove('d-none');
         if (queueTab) queueTab.classList.remove('d-none');
         if (queuePanel) queuePanel.classList.remove('d-none');
@@ -576,6 +594,119 @@ async function loadHistory() {
         }
     } catch (error) {
         console.error('Failed to load history:', error);
+    }
+}
+
+// Load and display admin analytics (SuperAdmin only)
+async function loadAdminAnalytics() {
+    if (!isStaticAdmin()) return;
+    const periodEl = document.getElementById('analytics-period');
+    const days = periodEl ? parseInt(periodEl.value, 10) : 30;
+    try {
+        const response = await fetch(`${API_BASE}/admin/analytics?days=${days}`, { credentials: 'include' });
+        if (!response.ok) {
+            console.error('Analytics fetch failed');
+            return;
+        }
+        const data = await response.json();
+        renderAnalyticsCharts(data);
+    } catch (err) {
+        console.error('Analytics load failed:', err);
+    }
+}
+
+function renderAnalyticsCharts(data) {
+    let adminPerf = data.admin_performance || [];
+    let peakHours = data.peak_hours || [];
+    if (adminPerf.length === 0) adminPerf = [{ admin_name: 'No data', numbers_served: 0, avg_service_minutes: 0 }];
+    if (peakHours.length === 0) peakHours = Array.from({ length: 24 }, (_, h) => ({ hour: h, hour_label: `${String(h).padStart(2, '0')}:00`, count: 0 }));
+    const CHART_COLORS = {
+        red: 'rgba(120, 0, 0, 0.8)',
+        redLight: 'rgba(120, 0, 0, 0.5)',
+        gold: 'rgba(201, 162, 39, 0.8)',
+        goldLight: 'rgba(201, 162, 39, 0.5)',
+    };
+
+    const labels = adminPerf.map(a => a.admin_name || 'Unknown');
+    const servedData = adminPerf.map(a => a.numbers_served || 0);
+    const avgTimeData = adminPerf.map(a => parseFloat(a.avg_service_minutes) || 0);
+
+    if (analyticsCharts.numbersServed) analyticsCharts.numbersServed.destroy();
+    const ctx1 = document.getElementById('chart-numbers-served');
+    if (ctx1) {
+        analyticsCharts.numbersServed = new Chart(ctx1, {
+            type: 'bar',
+            data: {
+                labels,
+                datasets: [{
+                    label: 'Numbers Served',
+                    data: servedData,
+                    backgroundColor: CHART_COLORS.redLight,
+                    borderColor: CHART_COLORS.red,
+                    borderWidth: 2
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: true,
+                plugins: { legend: { display: false } },
+                scales: {
+                    y: { beginAtZero: true, ticks: { stepSize: 1 } }
+                }
+            }
+        });
+    }
+
+    if (analyticsCharts.avgServiceTime) analyticsCharts.avgServiceTime.destroy();
+    const ctx2 = document.getElementById('chart-avg-service-time');
+    if (ctx2) {
+        analyticsCharts.avgServiceTime = new Chart(ctx2, {
+            type: 'bar',
+            data: {
+                labels,
+                datasets: [{
+                    label: 'Avg Service Time (min)',
+                    data: avgTimeData,
+                    backgroundColor: CHART_COLORS.goldLight,
+                    borderColor: CHART_COLORS.gold,
+                    borderWidth: 2
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: true,
+                plugins: { legend: { display: false } },
+                scales: {
+                    y: { beginAtZero: true }
+                }
+            }
+        });
+    }
+
+    if (analyticsCharts.peakHours) analyticsCharts.peakHours.destroy();
+    const ctx3 = document.getElementById('chart-peak-hours');
+    if (ctx3) {
+        analyticsCharts.peakHours = new Chart(ctx3, {
+            type: 'bar',
+            data: {
+                labels: peakHours.map(p => p.hour_label),
+                datasets: [{
+                    label: 'Completions',
+                    data: peakHours.map(p => p.count),
+                    backgroundColor: CHART_COLORS.redLight,
+                    borderColor: CHART_COLORS.red,
+                    borderWidth: 2
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: true,
+                plugins: { legend: { display: false } },
+                scales: {
+                    y: { beginAtZero: true, ticks: { stepSize: 1 } }
+                }
+            }
+        });
     }
 }
 

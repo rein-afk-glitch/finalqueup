@@ -187,15 +187,20 @@ def init_db():
                 priority VARCHAR(20) NOT NULL,
                 status VARCHAR(20) NOT NULL,
                 wait_time_minutes INT,
+                service_time_minutes INT,
                 served_by VARCHAR(255),
                 notes TEXT,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 completed_at TIMESTAMP NULL,
                 FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
                 INDEX idx_user_id (user_id),
-                INDEX idx_completed_at (completed_at)
+                INDEX idx_completed_at (completed_at),
+                INDEX idx_served_by (served_by)
             )
         """)
+        cursor.execute("SHOW COLUMNS FROM transaction_history LIKE 'service_time_minutes'")
+        if not cursor.fetchone():
+            cursor.execute("ALTER TABLE transaction_history ADD COLUMN service_time_minutes INT NULL")
         
         # Document verifications table
         cursor.execute("""
@@ -609,21 +614,24 @@ def queue_action():
                 WHERE id = %s
             """, (queue_id,))
         elif action == 'complete':
-            # Calculate wait time
+            # Calculate wait time (join to completion) and service time (called to completion)
             wait_time = None
+            service_time = None
             if queue_entry['called_at']:
                 cursor.execute("""
-                    SELECT TIMESTAMPDIFF(MINUTE, created_at, NOW()) as wait_time
+                    SELECT TIMESTAMPDIFF(MINUTE, created_at, NOW()) as wait_time,
+                           TIMESTAMPDIFF(MINUTE, called_at, NOW()) as service_time
                     FROM queue_entries WHERE id = %s
                 """, (queue_id,))
                 result = cursor.fetchone()
                 wait_time = result['wait_time'] if result else None
+                service_time = result['service_time'] if result else None
             
             # Move to transaction history
             cursor.execute("""
                 INSERT INTO transaction_history 
-                (id, user_id, user_name, service_type, queue_number, priority, status, wait_time_minutes, served_by, completed_at)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
+                (id, user_id, user_name, service_type, queue_number, priority, status, wait_time_minutes, service_time_minutes, served_by, completed_at)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
             """, (
                 str(uuid.uuid4()),
                 queue_entry['user_id'],
@@ -633,6 +641,7 @@ def queue_action():
                 queue_entry['priority'],
                 'completed',
                 wait_time,
+                service_time,
                 user['name']
             ))
             
@@ -922,6 +931,69 @@ def get_admin_stats():
             'total_waiting': total_waiting,
             'total_served_today': total_served_today,
             'services_count': services_count
+        }), 200
+    except mysql.connector.Error as err:
+        cursor.close()
+        conn.close()
+        return jsonify({'error': str(err)}), 500
+
+# Performance analytics (SuperAdmin / static admin only)
+@app.route('/api/admin/analytics', methods=['GET'])
+@require_auth
+@require_admin
+def get_admin_analytics():
+    user = get_current_user()
+    if not user or user.get('admin_type') != 'static':
+        return jsonify({'error': 'SuperAdmin access required'}), 403
+
+    days = int(request.args.get('days', 30))
+    if days < 1 or days > 365:
+        days = 30
+
+    conn = get_db_connection()
+    if not conn:
+        return jsonify({'error': 'Database connection failed'}), 500
+
+    cursor = conn.cursor(dictionary=True)
+    try:
+        # Admin performance: numbers served, average service time per admin
+        cursor.execute("""
+            SELECT 
+                served_by as admin_name,
+                COUNT(*) as numbers_served,
+                ROUND(AVG(COALESCE(service_time_minutes, wait_time_minutes)), 1) as avg_service_minutes
+            FROM transaction_history
+            WHERE served_by IS NOT NULL 
+              AND served_by != ''
+              AND completed_at >= DATE_SUB(CURDATE(), INTERVAL %s DAY)
+            GROUP BY served_by
+            ORDER BY numbers_served DESC
+        """, (days,))
+        admin_performance = cursor.fetchall()
+
+        # Peak hours: completions per hour of day (0-23)
+        cursor.execute("""
+            SELECT 
+                HOUR(completed_at) as hour,
+                COUNT(*) as count
+            FROM transaction_history
+            WHERE completed_at IS NOT NULL
+              AND completed_at >= DATE_SUB(CURDATE(), INTERVAL %s DAY)
+            GROUP BY HOUR(completed_at)
+            ORDER BY hour
+        """, (days,))
+        peak_rows = cursor.fetchall()
+        # Fill missing hours with 0
+        hour_counts = {r['hour']: r['count'] for r in peak_rows}
+        peak_hours = [{'hour': h, 'hour_label': f'{h:02d}:00', 'count': hour_counts.get(h, 0)} for h in range(24)]
+
+        cursor.close()
+        conn.close()
+
+        return jsonify({
+            'admin_performance': admin_performance,
+            'peak_hours': peak_hours,
+            'period_days': days
         }), 200
     except mysql.connector.Error as err:
         cursor.close()
