@@ -1040,8 +1040,10 @@ def create_admin():
     password = data.get('password')
     admin_service = data.get('admin_service')
 
-    if not name or not email or not password or admin_service not in ADMIN_SERVICE_TYPES:
-        return jsonify({'error': 'Name, email, password, and valid admin_service are required'}), 400
+    if not name or not email or not password:
+        return jsonify({'error': 'Name, email, and password are required'}), 400
+    if admin_service is not None and admin_service not in ADMIN_SERVICE_TYPES:
+        return jsonify({'error': 'Valid admin_service is required'}), 400
 
     conn = get_db_connection()
     if not conn:
@@ -1053,6 +1055,14 @@ def create_admin():
             cursor.close()
             conn.close()
             return jsonify({'error': 'Email already registered'}), 400
+        if admin_service:
+            cursor.execute("""
+                UPDATE users
+                SET admin_service = NULL
+                WHERE role = 'admin'
+                  AND admin_type = 'appointed'
+                  AND admin_service = %s
+            """, (admin_service,))
 
         user_id = str(uuid.uuid4())
         hashed_password = hash_password(password)
@@ -1080,7 +1090,7 @@ def update_admin_role(admin_id):
 
     data = request.json or {}
     admin_service = data.get('admin_service')
-    if admin_service not in ADMIN_SERVICE_TYPES:
+    if admin_service is not None and admin_service not in ADMIN_SERVICE_TYPES:
         return jsonify({'error': 'Valid admin_service is required'}), 400
 
     conn = get_db_connection()
@@ -1098,6 +1108,15 @@ def update_admin_role(admin_id):
             cursor.close()
             conn.close()
             return jsonify({'error': 'Cannot modify static admin'}), 403
+        if admin_service:
+            cursor.execute("""
+                UPDATE users
+                SET admin_service = NULL
+                WHERE role = 'admin'
+                  AND admin_type = 'appointed'
+                  AND admin_service = %s
+                  AND id != %s
+            """, (admin_service, admin_id))
         cursor.execute("""
             UPDATE users SET admin_service = %s WHERE id = %s
         """, (admin_service, admin_id))

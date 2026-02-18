@@ -1143,14 +1143,20 @@ async function loadAdminList() {
             tbody.innerHTML = `<tr><td colspan="6" class="text-center">${data.error || 'Failed to load admins'}</td></tr>`;
             return;
         }
+        const assignedServices = new Set(
+            (data || [])
+                .filter(admin => admin.admin_type === 'appointed' && admin.admin_service)
+                .map(admin => admin.admin_service)
+        );
         tbody.innerHTML = data.map(admin => {
             const isStatic = admin.admin_type === 'static';
             const roleSelect = isStatic
                 ? `<span class="badge bg-secondary">Protected</span>`
                 : `
                     <select class="form-select form-select-sm" id="admin-role-${admin.id}">
+                        <option value="" ${!admin.admin_service ? 'selected' : ''}>Unassigned</option>
                         ${SERVICE_TYPES.map(service => `
-                            <option value="${service}" ${admin.admin_service === service ? 'selected' : ''}>${formatServiceLabel(service)}</option>
+                            <option value="${service}" ${admin.admin_service === service ? 'selected' : ''} ${assignedServices.has(service) && admin.admin_service !== service ? 'disabled' : ''}>${formatServiceLabel(service)}</option>
                         `).join('')}
                     </select>
                 `;
@@ -1173,6 +1179,20 @@ async function loadAdminList() {
                 </tr>
             `;
         }).join('');
+        const createSelect = document.getElementById('new-admin-role');
+        if (createSelect) {
+            Array.from(createSelect.options).forEach(option => {
+                option.disabled = assignedServices.has(option.value);
+            });
+            if (createSelect.selectedOptions.length && createSelect.selectedOptions[0].disabled) {
+                const firstEnabled = Array.from(createSelect.options).find(option => !option.disabled);
+                if (firstEnabled) createSelect.value = firstEnabled.value;
+            }
+            const createBtn = document.querySelector('#create-admin-form button[type="submit"]');
+            const hasAvailableRole = Array.from(createSelect.options).some(option => !option.disabled);
+            if (createBtn) createBtn.disabled = !hasAvailableRole;
+            createSelect.disabled = !hasAvailableRole;
+        }
     } catch (error) {
         tbody.innerHTML = '<tr><td colspan="6" class="text-center">Connection error</td></tr>';
     }
@@ -1208,7 +1228,7 @@ async function loadUserList() {
 }
 
 async function updateAdminRole(adminId, adminService) {
-    if (!adminService) return;
+    const normalizedService = adminService || null;
     try {
         const response = await fetch(`${API_BASE}/admin/admins/${adminId}`, {
             method: 'PATCH',
@@ -1216,7 +1236,7 @@ async function updateAdminRole(adminId, adminService) {
                 'Content-Type': 'application/json'
             },
             credentials: 'include',
-            body: JSON.stringify({ admin_service: adminService })
+            body: JSON.stringify({ admin_service: normalizedService })
         });
         const data = await response.json();
         if (!response.ok) {
