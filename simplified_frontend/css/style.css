@@ -273,6 +273,7 @@ body {
 .admin-stat-card {
     border-radius: 16px;
     box-shadow: 0 8px 24px rgba(26, 26, 26, 0.12);
+    min-height: 130px;
 }
 
 .admin-stat-waiting {
@@ -290,13 +291,26 @@ body {
     border: none;
 }
 
+.admin-stat-card h6,
 .admin-stat-card h5,
 .admin-stat-card h2,
+.card.text-white h6,
 .card.text-white h5,
 .card.text-white h2,
 .card.text-white h4 {
     color: var(--usa-white) !important;
     font-weight: 700;
+}
+
+#admin-stats-row .card,
+#admin-stats-row .admin-stat-card {
+    min-height: 130px;
+}
+
+#admin-stats-row .card .card-body {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
 }
 
 /* Service stats - use red/gold variations */

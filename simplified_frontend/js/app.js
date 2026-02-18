@@ -106,10 +106,7 @@ function showDashboard(role) {
     if (role === 'admin') {
         document.getElementById('admin-dashboard').classList.remove('d-none');
         document.getElementById('student-dashboard').classList.add('d-none');
-        const roleLabel = isStaticAdmin()
-            ? 'Static Admin'
-            : `${formatAdminServiceLabel(currentUser.admin_service)} Admin`;
-        document.getElementById('admin-user-name').textContent = `${currentUser.name} (${roleLabel})`;
+        document.getElementById('admin-user-name').textContent = currentUser.name || '';
         configureAdminView();
         loadAdminDashboard();
     } else {
