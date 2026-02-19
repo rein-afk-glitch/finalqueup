@@ -3,15 +3,15 @@
 const getApiBase = () => {
     const hostname = window.location.hostname;
     const protocol = window.location.protocol;
-    
+
     if (!hostname) {
         return `${protocol}//localhost:5001/api`;
     }
-    
+
     if (hostname === 'localhost' || hostname === '127.0.0.1') {
         return `${protocol}//localhost:5001/api`;
     }
-    
+
     return `${protocol}//${hostname}/api`;
 };
 
@@ -66,8 +66,8 @@ function formatAdminServiceLabel(service) {
 }
 
 // Initialize app
-document.addEventListener('DOMContentLoaded', function() {
-    checkAuthStatus();
+document.addEventListener('DOMContentLoaded', function () {
+    initApp();
     setupEventListeners();
 });
 
@@ -77,7 +77,7 @@ async function checkAuthStatus() {
         const response = await fetch(`${API_BASE}/auth/me`, {
             credentials: 'include'
         });
-        
+
         if (response.ok) {
             const user = await response.json();
             currentUser = user;
@@ -93,25 +93,18 @@ async function checkAuthStatus() {
 
 // Show login page
 function showLogin() {
-    document.getElementById('login-page').classList.remove('d-none');
-    document.getElementById('admin-dashboard').classList.add('d-none');
-    document.getElementById('student-dashboard').classList.add('d-none');
-    stopPolling();
+    showPage('login-page');
 }
 
 // Show dashboard based on role
 function showDashboard(role) {
-    document.getElementById('login-page').classList.add('d-none');
-    
+    showPage(role === 'admin' ? 'admin-dashboard' : 'student-dashboard');
+
     if (role === 'admin') {
-        document.getElementById('admin-dashboard').classList.remove('d-none');
-        document.getElementById('student-dashboard').classList.add('d-none');
         document.getElementById('admin-user-name').textContent = currentUser.name || '';
         configureAdminView();
         loadAdminDashboard();
     } else {
-        document.getElementById('student-dashboard').classList.remove('d-none');
-        document.getElementById('admin-dashboard').classList.add('d-none');
         // Put user name in the navbar title (replaces "Student Portal")
         const titleEl = document.getElementById('student-navbar-title');
         if (titleEl) titleEl.textContent = currentUser.name || 'Student';
@@ -128,7 +121,7 @@ function showDashboard(role) {
 function setupEventListeners() {
     // Login form
     document.getElementById('login-form').addEventListener('submit', handleLogin);
-    
+
     // Register form
     document.getElementById('register-form').addEventListener('submit', handleRegister);
 
@@ -150,31 +143,31 @@ function setupEventListeners() {
             periodSelect.addEventListener('change', loadAdminAnalytics);
         }
     }
-    
+
     // Join queue form
     document.getElementById('join-queue-form').addEventListener('submit', handleJoinQueue);
-    
+
     // Verification form
     document.getElementById('verification-form').addEventListener('submit', handleVerification);
-    
+
     // Service selection buttons (mobile-friendly) + student office filters
-    document.addEventListener('click', function(e) {
+    document.addEventListener('click', function (e) {
         // Service button clicks
         if (e.target.closest('.service-btn')) {
             const serviceBtn = e.target.closest('.service-btn');
             const service = serviceBtn.dataset.service;
-            
+
             // Remove active class from all service buttons
             document.querySelectorAll('.service-btn').forEach(btn => {
                 btn.classList.remove('active');
             });
-            
+
             // Add active class to clicked button
             serviceBtn.classList.add('active');
-            
+
             // Set the hidden input value
             document.getElementById('service-type').value = service;
-            
+
             // Check if both service and priority are selected, then submit
             const priority = document.getElementById('priority').value;
             if (service && priority) {
@@ -184,23 +177,23 @@ function setupEventListeners() {
                 }, 200);
             }
         }
-        
+
         // Priority button clicks
         if (e.target.closest('.priority-btn')) {
             const priorityBtn = e.target.closest('.priority-btn');
             const priority = priorityBtn.dataset.priority;
-            
+
             // Remove active class from all priority buttons
             document.querySelectorAll('.priority-btn').forEach(btn => {
                 btn.classList.remove('active');
             });
-            
+
             // Add active class to clicked button
             priorityBtn.classList.add('active');
-            
+
             // Set the hidden input value
             document.getElementById('priority').value = priority;
-            
+
             // Check if both service and priority are selected, then submit
             const service = document.getElementById('service-type').value;
             if (service && priority) {
@@ -210,7 +203,7 @@ function setupEventListeners() {
                 }, 200);
             }
         }
-        
+
         // Student service office filters (Join Queue section)
         const officeFilterBtn = e.target.closest('.service-filter-btn');
         if (officeFilterBtn) {
@@ -242,15 +235,15 @@ function setupEventListeners() {
             const filterBtn = e.target.closest('.filter-btn');
             if (filterBtn.disabled) return;
             const filterValue = filterBtn.dataset.filter;
-            
+
             // Remove active class from all filter buttons
             document.querySelectorAll('.filter-btn').forEach(btn => {
                 btn.classList.remove('active');
             });
-            
+
             // Add active class to clicked button
             filterBtn.classList.add('active');
-            
+
             // Load queue list with filter
             loadQueueListWithFilter(filterValue);
         }
@@ -281,13 +274,73 @@ function setupEventListeners() {
     });
 }
 
+// Navigation
+function showPage(pageId) {
+    const pages = ['landing-page', 'login-page', 'admin-dashboard', 'student-dashboard'];
+    pages.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) {
+            if (id === pageId) {
+                el.classList.remove('d-none');
+                // If it's the login page, ensure it's flex but also visible
+                if (id === 'login-page') {
+                    el.style.display = 'flex';
+                } else if (id === 'landing-page') {
+                    el.style.display = 'block';
+                }
+            } else {
+                el.classList.add('d-none');
+                el.style.display = 'none';
+            }
+        }
+    });
+
+    // Auto-refresh queue status if on a dashboard
+    if (pageId === 'admin-dashboard' || pageId === 'student-dashboard') {
+        updateQueueStatus();
+        if (!statusInterval) {
+            statusInterval = setInterval(updateQueueStatus, 5000);
+        }
+    } else {
+        if (statusInterval) {
+            clearInterval(statusInterval);
+            statusInterval = null;
+        }
+    }
+}
+
+document.getElementById('nav-start-btn')?.addEventListener('click', () => showPage('login-page'));
+document.getElementById('start-btn')?.addEventListener('click', () => showPage('login-page'));
+document.getElementById('nav-signin-btn')?.addEventListener('click', () => showPage('login-page'));
+document.getElementById('login-back-btn')?.addEventListener('click', () => showPage('landing-page'));
+
+// Initial page check
+async function initApp() {
+    try {
+        const response = await fetch(`${API_BASE}/auth/me`, {
+            credentials: 'include'
+        });
+
+        if (response.ok) {
+            const user = await response.json();
+            currentUser = user;
+            showDashboard(user.role);
+        } else {
+            showPage('landing-page');
+        }
+    } catch (error) {
+        console.error('Auth check failed:', error);
+        showPage('landing-page');
+    }
+}
+
 // Handle login
 async function handleLogin(e) {
     e.preventDefault();
     const email = document.getElementById('login-email').value;
     const password = document.getElementById('login-password').value;
     const errorDiv = document.getElementById('login-error');
-    
+
     try {
         const response = await fetch(`${API_BASE}/auth/login`, {
             method: 'POST',
@@ -297,9 +350,9 @@ async function handleLogin(e) {
             credentials: 'include',
             body: JSON.stringify({ email, password })
         });
-        
+
         const data = await response.json();
-        
+
         if (response.ok) {
             currentUser = data;
             showDashboard(data.role);
@@ -323,9 +376,9 @@ async function handleRegister(e) {
         password: document.getElementById('register-password').value,
         student_id: document.getElementById('register-student-id').value || null
     };
-    
+
     const errorDiv = document.getElementById('register-error');
-    
+
     try {
         const response = await fetch(`${API_BASE}/auth/register`, {
             method: 'POST',
@@ -335,9 +388,9 @@ async function handleRegister(e) {
             credentials: 'include',
             body: JSON.stringify(formData)
         });
-        
+
         const data = await response.json();
-        
+
         if (response.ok) {
             // Close modal and show success
             const modal = bootstrap.Modal.getInstance(document.getElementById('registerModal'));
@@ -364,7 +417,7 @@ async function logout() {
     } catch (error) {
         console.error('Logout error:', error);
     }
-    
+
     currentUser = null;
     showLogin();
 }
@@ -458,7 +511,7 @@ async function loadAdminStats() {
         const response = await fetch(`${API_BASE}/admin/stats`, {
             credentials: 'include'
         });
-        
+
         if (response.ok) {
             const stats = await response.json();
             document.getElementById('stats-waiting').textContent = stats.total_waiting || 0;
@@ -481,7 +534,7 @@ async function loadQueueList() {
     if (currentUser?.role === 'admin' && !isStaticAdmin() && currentUser?.admin_service) {
         serviceType = currentUser.admin_service;
     }
-    
+
     await loadQueueListWithFilter(serviceType);
 }
 
@@ -491,14 +544,14 @@ async function loadQueueListWithFilter(serviceType = '') {
         serviceType = currentUser.admin_service;
     }
     try {
-        const url = serviceType 
+        const url = serviceType
             ? `${API_BASE}/queue/status?service_type=${serviceType}`
             : `${API_BASE}/queue/status`;
-        
+
         const response = await fetch(url, {
             credentials: 'include'
         });
-        
+
         if (response.ok) {
             const entries = await response.json();
             displayQueueList(entries);
@@ -511,30 +564,30 @@ async function loadQueueListWithFilter(serviceType = '') {
 // Display queue list
 function displayQueueList(entries) {
     const container = document.getElementById('queue-list');
-    
+
     if (entries.length === 0) {
         container.innerHTML = '<div class="col-12"><div class="alert alert-info">No entries in queue</div></div>';
         return;
     }
-    
+
     container.innerHTML = entries.map(entry => {
         const statusBadge = {
             'waiting': '<span class="badge bg-warning">Waiting</span>',
             'called': '<span class="badge bg-info">Called</span>',
             'serving': '<span class="badge bg-success">Serving</span>'
         }[entry.status] || '<span class="badge bg-secondary">' + entry.status + '</span>';
-        
-        const priorityBadge = entry.priority === 'senior_pwd' 
-            ? '<span class="badge bg-danger">Senior/PWD</span>' 
+
+        const priorityBadge = entry.priority === 'senior_pwd'
+            ? '<span class="badge bg-danger">Senior/PWD</span>'
             : '';
-        
-        const actions = entry.status === 'waiting' 
+
+        const actions = entry.status === 'waiting'
             ? `<button class="btn btn-sm btn-primary" onclick="queueAction('${entry.id}', 'call')">Call</button>`
             : entry.status === 'called'
-            ? `<button class="btn btn-sm btn-success" onclick="queueAction('${entry.id}', 'next')">Next</button>`
-            : `<button class="btn btn-sm btn-success" onclick="queueAction('${entry.id}', 'complete')">Complete</button>
+                ? `<button class="btn btn-sm btn-success" onclick="queueAction('${entry.id}', 'next')">Next</button>`
+                : `<button class="btn btn-sm btn-success" onclick="queueAction('${entry.id}', 'complete')">Complete</button>
                <button class="btn btn-sm btn-danger" onclick="queueAction('${entry.id}', 'no_show')">No Show</button>`;
-        
+
         return `
             <div class="col-md-4 mb-3">
                 <div class="card">
@@ -564,7 +617,7 @@ async function queueAction(queueId, action) {
             credentials: 'include',
             body: JSON.stringify({ queue_id: queueId, action: action })
         });
-        
+
         if (response.ok) {
             loadQueueList();
             loadAdminStats();
@@ -584,7 +637,7 @@ async function loadHistory() {
         const response = await fetch(`${API_BASE}/transactions/history`, {
             credentials: 'include'
         });
-        
+
         if (response.ok) {
             const history = await response.json();
             displayHistory(history);
@@ -710,12 +763,12 @@ function renderAnalyticsCharts(data) {
 // Display history
 function displayHistory(history) {
     const tbody = document.getElementById('history-tbody');
-    
+
     if (history.length === 0) {
         tbody.innerHTML = '<tr><td colspan="6" class="text-center">No transaction history</td></tr>';
         return;
     }
-    
+
     tbody.innerHTML = history.map(trans => {
         return `
             <tr>
@@ -899,7 +952,7 @@ async function loadMyQueue() {
         const response = await fetch(`${API_BASE}/queue/my-queue`, {
             credentials: 'include'
         });
-        
+
         if (response.ok) {
             const queue = await response.json();
             displayMyQueue(queue);
@@ -918,13 +971,13 @@ function displayMyQueue(queue) {
         if (statusDiv) statusDiv.innerHTML = '<div class="alert alert-info">No active queue</div>';
         return;
     }
-    
+
     const statusBadge = {
         'waiting': '<span class="badge bg-warning">Waiting</span>',
         'called': '<span class="badge bg-info">Called</span>',
         'serving': '<span class="badge bg-success">Serving</span>'
     }[queue.status] || '<span class="badge bg-secondary">' + queue.status + '</span>';
-    
+
     statusDiv.innerHTML = `
         <div class="alert alert-success">
             <h5>Queue Number: ${queue.queue_number}</h5>
@@ -940,12 +993,12 @@ async function handleJoinQueue(e) {
     e.preventDefault();
     const serviceType = document.getElementById('service-type').value;
     const priority = document.getElementById('priority').value;
-    
+
     if (!serviceType) {
         alert('Please select a service');
         return;
     }
-    
+
     try {
         const response = await fetch(`${API_BASE}/queue/join`, {
             method: 'POST',
@@ -955,9 +1008,9 @@ async function handleJoinQueue(e) {
             credentials: 'include',
             body: JSON.stringify({ service_type: serviceType, priority: priority })
         });
-        
+
         const data = await response.json();
-        
+
         if (response.ok) {
             loadMyQueue();
             // Reset selection
@@ -970,11 +1023,11 @@ async function handleJoinQueue(e) {
             });
             document.getElementById('service-type').value = '';
             document.getElementById('priority').value = 'regular';
-            
+
             // Show success message
             const statusDiv = document.getElementById('my-queue-status');
             statusDiv.innerHTML = '<div class="alert alert-success"><i class="bi bi-check-circle me-2"></i>Successfully joined queue! Your queue number is being assigned...</div>';
-            
+
             // Refresh queue status after a moment
             setTimeout(() => {
                 loadMyQueue();
@@ -994,33 +1047,33 @@ async function handleVerification(e) {
     const referenceNumber = document.getElementById('reference-number').value;
     const accountNumber = document.getElementById('account-number').value;
     const resultDiv = document.getElementById('verification-result');
-    
+
     if (!fileInput.files[0]) {
         alert('Please select a file');
         return;
     }
-    
+
     const formData = new FormData();
     formData.append('file', fileInput.files[0]);
     formData.append('reference_number', referenceNumber);
     formData.append('account_number', accountNumber);
-    
+
     resultDiv.innerHTML = '<div class="alert alert-info">Verifying receipt... Please wait.</div>';
-    
+
     try {
         const response = await fetch(`${API_BASE}/receipts/verify`, {
             method: 'POST',
             credentials: 'include',
             body: formData
         });
-        
+
         const data = await response.json();
-        
+
         if (response.ok) {
             const statusBadge = data.confidence_score >= 90
                 ? '<span class="badge bg-success">VERIFIED</span>'
                 : '<span class="badge bg-danger">NOT VERIFIED</span>';
-            
+
             resultDiv.innerHTML = `
                 <div class="alert alert-${data.confidence_score >= 90 ? 'success' : 'warning'}">
                     <h5>Verification Result: ${statusBadge}</h5>
@@ -1043,7 +1096,7 @@ async function loadStudentHistory() {
         const response = await fetch(`${API_BASE}/transactions/history`, {
             credentials: 'include'
         });
-        
+
         if (response.ok) {
             const history = await response.json();
             displayStudentHistory(history);
@@ -1056,12 +1109,12 @@ async function loadStudentHistory() {
 // Display student history
 function displayStudentHistory(history) {
     const tbody = document.getElementById('student-history-tbody');
-    
+
     if (history.length === 0) {
         tbody.innerHTML = '<tr><td colspan="5" class="text-center">No transaction history</td></tr>';
         return;
     }
-    
+
     tbody.innerHTML = history.map(trans => {
         return `
             <tr>
