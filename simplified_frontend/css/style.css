@@ -233,6 +233,21 @@ body {
     background: linear-gradient(135deg, var(--usa-red) 0%, var(--usa-red-dark) 100%) !important;
 }
 
+@media (max-width: 768px) {
+    .navbar {
+        padding: 0.5rem 0 !important;
+    }
+
+    .navbar-brand {
+        font-size: 1.1rem !important;
+    }
+
+    .student-logout-btn {
+        padding: 0.25rem 0.5rem !important;
+        font-size: 0.75rem !important;
+    }
+}
+
 .navbar-brand {
     font-weight: 700;
     font-size: 1.25rem;
@@ -242,6 +257,28 @@ body {
 .navbar-brand i {
     margin-right: 0.5rem;
     color: var(--usa-gold);
+}
+
+.navbar-student .navbar-brand {
+    display: flex;
+    align-items: center;
+    max-width: calc(100vw - 180px);
+    /* Leave room for burger and logout */
+    overflow: hidden;
+}
+
+#student-navbar-title {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    display: inline-block;
+}
+
+.navbar-student .btn-link:focus,
+.navbar-student .btn-link:active {
+    box-shadow: none;
+    outline: none;
+    text-decoration: none;
 }
 
 /* Cards */
@@ -491,7 +528,56 @@ body {
 
 /* Tabs */
 .nav-tabs {
-    border-bottom: 3px solid var(--border-color);
+    border-bottom: 1px solid var(--border-color);
+}
+
+.offcanvas-start {
+    width: 50% !important;
+    max-width: 280px;
+}
+
+.sidebar-nav {
+    height: 100%;
+}
+
+.sidebar-nav .list-group-item {
+    padding: 1.25rem 1.5rem;
+    border: none;
+    font-weight: 500;
+    font-size: 1rem;
+    color: var(--text-color);
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+}
+
+.sidebar-nav .list-group-item i {
+    font-size: 1.25rem;
+    color: var(--usa-red);
+}
+
+.sidebar-nav .list-group-item:hover {
+    background-color: rgba(120, 0, 0, 0.05);
+    color: var(--usa-red);
+}
+
+.sidebar-nav .list-group-item.active {
+    background-color: rgba(120, 0, 0, 0.08) !important;
+    color: var(--usa-red) !important;
+    border-left: 4px solid var(--usa-red);
+    font-weight: 700;
+}
+
+.sidebar-nav .list-group-item.active i {
+    color: var(--usa-red);
+}
+
+.offcanvas-header .btn-close {
+    opacity: 0.8;
+}
+
+.offcanvas-header .btn-close:hover {
+    opacity: 1;
 }
 
 .nav-tabs .nav-link {
@@ -1042,8 +1128,8 @@ pre {
 
     .btn-landing-primary,
     .btn-landing-outline {
-        padding: 0.6rem 1.25rem;
-        font-size: 0.9rem;
+        padding: 0.45rem 1rem !important;
+        font-size: 0.85rem !important;
     }
 
     .landing-hero {
@@ -1066,8 +1152,8 @@ pre {
         margin-left: 0 !important;
     }
 
-    .btn-landing-primary,
-    .btn-landing-outline {
+    .hero-buttons .btn-landing-primary,
+    .hero-buttons .btn-landing-outline {
         width: 100%;
         padding: 0.875rem;
     }
@@ -1348,4 +1434,66 @@ pre {
     #admin-dashboard nav {
         display: none !important;
     }
+}
+
+/* Brand Colors */
+.bg-usa-red {
+    background-color: var(--usa-red) !important;
+}
+
+.bg-usa-gold {
+    background-color: var(--usa-gold) !important;
+}
+
+.text-usa-red {
+    color: var(--usa-red) !important;
+}
+
+.text-usa-gold {
+    color: var(--usa-gold) !important;
+}
+
+/* Admin Specific Styles */
+.admin-stat-card {
+    border: none;
+    border-radius: 16px;
+    transition: transform 0.3s ease;
+    margin-bottom: 1rem;
+}
+
+.admin-stat-card:hover {
+    transform: translateY(-5px);
+}
+
+.admin-stat-waiting {
+    background: linear-gradient(135deg, var(--usa-red) 0%, var(--usa-red-dark) 100%);
+}
+
+.admin-stat-served {
+    background: linear-gradient(135deg, var(--usa-gold) 0%, var(--usa-gold-dark) 100%);
+}
+
+.admin-stat-service {
+    background: linear-gradient(135deg, var(--usa-black-soft) 0%, var(--usa-black) 100%);
+}
+
+.bg-usa-red-gradient {
+    background: linear-gradient(135deg, var(--usa-red) 0%, var(--usa-red-dark) 100%) !important;
+}
+
+.nav-tabs .nav-link.active {
+    background-color: var(--usa-red) !important;
+    color: #ffffff !important;
+    border-radius: 12px 12px 0 0;
+    font-weight: 600;
+}
+
+.nav-tabs .nav-link {
+    color: var(--text-muted);
+    border: none;
+    padding: 1rem 1.5rem;
+}
+
+.nav-tabs {
+    border-bottom: 1px solid var(--border-color);
 }

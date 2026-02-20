@@ -107,7 +107,9 @@ function showDashboard(role) {
     } else {
         // Put user name in the navbar title (replaces "Student Portal")
         const titleEl = document.getElementById('student-navbar-title');
-        if (titleEl) titleEl.textContent = currentUser.name || 'Student';
+        if (titleEl) {
+            titleEl.textContent = currentUser.name || 'Student';
+        }
 
         // Hide the old right-side name (kept for compatibility, but not used)
         const rightNameEl = document.getElementById('student-user-name');
@@ -248,6 +250,39 @@ function setupEventListeners() {
             loadQueueListWithFilter(filterValue);
         }
 
+        // Student Sidebar navigation handling
+        const sidebarLink = e.target.closest('.sidebar-nav .list-group-item');
+        if (sidebarLink && sidebarLink.dataset.bsTarget) {
+            const targetId = sidebarLink.dataset.bsTarget;
+            // Sync with desktop tabs (if visible)
+            const desktopTab = document.querySelector(`#student-tabs [data-bs-target="${targetId}"]`);
+            if (desktopTab) {
+                const tab = new bootstrap.Tab(desktopTab);
+                tab.show();
+            }
+
+            // Sync active state in sidebar
+            document.querySelectorAll('.sidebar-nav .list-group-item').forEach(btn => {
+                btn.classList.toggle('active', btn === sidebarLink);
+            });
+
+            // Auto-close offcanvas
+            const offcanvasEl = document.getElementById('studentSidebar');
+            const offcanvas = bootstrap.Offcanvas.getInstance(offcanvasEl);
+            if (offcanvas) {
+                offcanvas.hide();
+            }
+        }
+
+        // Desktop tab selection sync with sidebar
+        if (e.target.closest('#student-tabs .nav-link')) {
+            const tabBtn = e.target.closest('#student-tabs .nav-link');
+            const targetId = tabBtn.dataset.bsTarget;
+            document.querySelectorAll('.sidebar-nav .list-group-item').forEach(btn => {
+                btn.classList.toggle('active', btn.dataset.bsTarget === targetId);
+            });
+        }
+
         // Admin management actions
         const adminActionBtn = e.target.closest('button[data-admin-action]');
         if (adminActionBtn) {
@@ -282,10 +317,10 @@ function showPage(pageId) {
         if (el) {
             if (id === pageId) {
                 el.classList.remove('d-none');
-                // If it's the login page, ensure it's flex but also visible
+                // Ensure correct display type
                 if (id === 'login-page') {
                     el.style.display = 'flex';
-                } else if (id === 'landing-page') {
+                } else {
                     el.style.display = 'block';
                 }
             } else {
@@ -295,17 +330,10 @@ function showPage(pageId) {
         }
     });
 
-    // Auto-refresh queue status if on a dashboard
-    if (pageId === 'admin-dashboard' || pageId === 'student-dashboard') {
-        updateQueueStatus();
-        if (!statusInterval) {
-            statusInterval = setInterval(updateQueueStatus, 5000);
-        }
-    } else {
-        if (statusInterval) {
-            clearInterval(statusInterval);
-            statusInterval = null;
-        }
+    // Clear all polling intervals when changing pages
+    // The specific dashboard loaders will restart them if needed
+    if (typeof stopPolling === 'function') {
+        stopPolling();
     }
 }
 

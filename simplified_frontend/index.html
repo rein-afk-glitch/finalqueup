@@ -471,10 +471,16 @@
         <div id="student-dashboard" class="d-none">
             <nav class="navbar navbar-dark navbar-student">
                 <div class="container-fluid">
-                    <span class="navbar-brand mb-0 h1">
-                        <i class="bi bi-person-circle"></i>
-                        <span id="student-navbar-title">Student</span>
-                    </span>
+                    <div class="d-flex align-items-center">
+                        <button class="btn btn-link text-white border-0 me-2 d-md-none" type="button"
+                            data-bs-toggle="offcanvas" data-bs-target="#studentSidebar" aria-controls="studentSidebar">
+                            <i class="bi bi-list fs-3"></i>
+                        </button>
+                        <span class="navbar-brand mb-0 h1">
+                            <i class="bi bi-person-circle"></i>
+                            <span id="student-navbar-title">Student</span>
+                        </span>
+                    </div>
                     <div class="student-header-right">
                         <span class="text-white me-3 student-user-name d-none" id="student-user-name"></span>
                         <button class="btn btn-outline-light btn-sm student-logout-btn"
@@ -483,11 +489,50 @@
                 </div>
             </nav>
 
+            <!-- Student Sidebar (Offcanvas) -->
+            <div class="offcanvas offcanvas-start" tabindex="-1" id="studentSidebar"
+                aria-labelledby="studentSidebarLabel">
+                <div class="offcanvas-header bg-usa-red text-white">
+                    <h5 class="offcanvas-title" id="studentSidebarLabel">
+                        <i class="bi bi-person-circle me-2"></i>Dashboard Menu
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="offcanvas"
+                        aria-label="Close"></button>
+                </div>
+                <div class="offcanvas-body p-0">
+                    <div class="list-group list-group-flush sidebar-nav" role="tablist">
+                        <button class="list-group-item list-group-item-action active" data-bs-toggle="tab"
+                            data-bs-target="#join-queue-panel" type="button">
+                            <i class="bi bi-plus-circle me-3"></i>Join Queue
+                        </button>
+                        <button class="list-group-item list-group-item-action" data-bs-toggle="tab"
+                            data-bs-target="#now-serving-panel" type="button">
+                            <i class="bi bi-broadcast me-3"></i>Now Serving
+                        </button>
+                        <button class="list-group-item list-group-item-action" data-bs-toggle="tab"
+                            data-bs-target="#verification-panel" type="button">
+                            <i class="bi bi-patch-check me-3"></i>Receipt Verification
+                        </button>
+                        <button class="list-group-item list-group-item-action" data-bs-toggle="tab"
+                            data-bs-target="#student-history-panel" type="button">
+                            <i class="bi bi-clock-history me-3"></i>My History
+                        </button>
+                        <button class="list-group-item list-group-item-action text-danger mt-auto" onclick="logout()">
+                            <i class="bi bi-box-arrow-right me-3"></i>Logout
+                        </button>
+                    </div>
+                </div>
+            </div>
+
             <div class="container-fluid mt-4">
-                <ul class="nav nav-tabs" id="student-tabs" role="tablist">
+                <ul class="nav nav-tabs d-none d-md-flex" id="student-tabs" role="tablist">
                     <li class="nav-item" role="presentation">
                         <button class="nav-link active" id="join-queue-tab" data-bs-toggle="tab"
                             data-bs-target="#join-queue-panel" type="button">Join Queue</button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="now-serving-tab" data-bs-toggle="tab"
+                            data-bs-target="#now-serving-panel" type="button">Now Serving</button>
                     </li>
                     <li class="nav-item" role="presentation">
                         <button class="nav-link" id="verification-tab" data-bs-toggle="tab"
@@ -503,140 +548,6 @@
                     <div class="tab-pane fade show active" id="join-queue-panel">
                         <div class="card">
                             <div class="card-body">
-                                <div class="d-flex flex-wrap align-items-center justify-content-between mb-2">
-                                    <h5 class="card-title mb-0">Now Serving</h5>
-                                    <div class="btn-group-student-filters now-serving-filters">
-                                        <button type="button"
-                                            class="btn btn-outline-primary now-serving-filter-btn active"
-                                            data-office-filter="all">
-                                            All
-                                        </button>
-                                        <button type="button" class="btn btn-outline-primary now-serving-filter-btn"
-                                            data-office-filter="registrar">
-                                            Registrar
-                                        </button>
-                                        <button type="button" class="btn btn-outline-primary now-serving-filter-btn"
-                                            data-office-filter="accounting">
-                                            Accounting
-                                        </button>
-                                    </div>
-                                </div>
-                                <div id="now-serving" class="mb-3">
-                                    <div class="row g-3" id="now-serving-row">
-                                        <div class="col-12 col-md-4 col-lg-3 now-serving-col" data-office="registrar"
-                                            data-service="submission_of_application_forms">
-                                            <div class="card now-serving-card">
-                                                <div class="card-body text-center">
-                                                    <div class="text-uppercase small text-muted fw-bold">Submission of
-                                                        Application Forms</div>
-                                                    <div class="now-serving-number"
-                                                        id="now-serving-submission_of_application_forms">—</div>
-                                                    <div class="small text-muted"
-                                                        id="now-serving-submission_of_application_forms-status">No one
-                                                        is being served</div>
-                                                </div>
-                                            </div>
-                                        </div>
-                                        <div class="col-12 col-md-4 col-lg-3 now-serving-col" data-office="registrar"
-                                            data-service="application_assessment_of_school_records">
-                                            <div class="card now-serving-card">
-                                                <div class="card-body text-center">
-                                                    <div class="text-uppercase small text-muted fw-bold">Application
-                                                        &amp; Assessment of School Records</div>
-                                                    <div class="now-serving-number"
-                                                        id="now-serving-application_assessment_of_school_records">—
-                                                    </div>
-                                                    <div class="small text-muted"
-                                                        id="now-serving-application_assessment_of_school_records-status">
-                                                        No one is being served</div>
-                                                </div>
-                                            </div>
-                                        </div>
-                                        <div class="col-12 col-md-4 col-lg-3 now-serving-col" data-office="registrar"
-                                            data-service="releasing_of_school_records">
-                                            <div class="card now-serving-card">
-                                                <div class="card-body text-center">
-                                                    <div class="text-uppercase small text-muted fw-bold">Releasing of
-                                                        School Records</div>
-                                                    <div class="now-serving-number"
-                                                        id="now-serving-releasing_of_school_records">—</div>
-                                                    <div class="small text-muted"
-                                                        id="now-serving-releasing_of_school_records-status">No one is
-                                                        being served</div>
-                                                </div>
-                                            </div>
-                                        </div>
-                                        <div class="col-12 col-md-4 col-lg-3 now-serving-col" data-office="registrar"
-                                            data-service="inquiry_follow_up">
-                                            <div class="card now-serving-card">
-                                                <div class="card-body text-center">
-                                                    <div class="text-uppercase small text-muted fw-bold">Inquiry &amp;
-                                                        Follow-Up</div>
-                                                    <div class="now-serving-number" id="now-serving-inquiry_follow_up">—
-                                                    </div>
-                                                    <div class="small text-muted"
-                                                        id="now-serving-inquiry_follow_up-status">No one is being served
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </div>
-                                        <div class="col-12 col-md-4 col-lg-3 now-serving-col" data-office="registrar"
-                                            data-service="faculty_tagging_room_assignments">
-                                            <div class="card now-serving-card">
-                                                <div class="card-body text-center">
-                                                    <div class="text-uppercase small text-muted fw-bold">Faculty Tagging
-                                                        &amp; Room Assignments</div>
-                                                    <div class="now-serving-number"
-                                                        id="now-serving-faculty_tagging_room_assignments">—</div>
-                                                    <div class="small text-muted"
-                                                        id="now-serving-faculty_tagging_room_assignments-status">No one
-                                                        is being served</div>
-                                                </div>
-                                            </div>
-                                        </div>
-                                        <div class="col-12 col-md-4 col-lg-3 now-serving-col" data-office="accounting"
-                                            data-service="payment">
-                                            <div class="card now-serving-card">
-                                                <div class="card-body text-center">
-                                                    <div class="text-uppercase small text-muted fw-bold">Payment</div>
-                                                    <div class="now-serving-number" id="now-serving-payment">—</div>
-                                                    <div class="small text-muted" id="now-serving-payment-status">No one
-                                                        is being served</div>
-                                                </div>
-                                            </div>
-                                        </div>
-                                        <div class="col-12 col-md-4 col-lg-3 now-serving-col" data-office="accounting"
-                                            data-service="balance_inquiry">
-                                            <div class="card now-serving-card">
-                                                <div class="card-body text-center">
-                                                    <div class="text-uppercase small text-muted fw-bold">Balance Inquiry
-                                                    </div>
-                                                    <div class="now-serving-number" id="now-serving-balance_inquiry">—
-                                                    </div>
-                                                    <div class="small text-muted"
-                                                        id="now-serving-balance_inquiry-status">No one is being served
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </div>
-                                        <div class="col-12 col-md-4 col-lg-3 now-serving-col" data-office="accounting"
-                                            data-service="claims">
-                                            <div class="card now-serving-card">
-                                                <div class="card-body text-center">
-                                                    <div class="text-uppercase small text-muted fw-bold">Claims</div>
-                                                    <div class="now-serving-number" id="now-serving-claims">—</div>
-                                                    <div class="small text-muted" id="now-serving-claims-status">No one
-                                                        is being served</div>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <h5 class="card-title">My Current Queue</h5>
-                                <div id="my-queue-status" class="alert alert-info">No active queue</div>
-
-                                <hr>
                                 <h5 class="card-title mb-4">Join New Queue</h5>
 
                                 <!-- Priority Selection -->
@@ -672,7 +583,7 @@
                                         </div>
                                     </div>
 
-                                    <!-- Registrar Services (hidden by default; shown when Registrar filter is active) -->
+                                    <!-- Registrar Services -->
                                     <div class="service-office-group registrar-group" data-office="registrar"
                                         style="display: none;">
                                         <div class="service-office-header">
@@ -816,6 +727,147 @@
                                     <input type="hidden" id="service-type" name="service_type" required>
                                     <input type="hidden" id="priority" name="priority" value="regular">
                                 </form>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="tab-pane fade" id="now-serving-panel">
+                        <div class="card">
+                            <div class="card-body">
+                                <div class="mb-4">
+                                    <h5 class="card-title">My Current Queue</h5>
+                                    <div id="my-queue-status" class="alert alert-info">No active queue</div>
+                                </div>
+                                <hr>
+                                <div class="d-flex flex-wrap align-items-center justify-content-between mb-2">
+                                    <h5 class="card-title mb-0">Now Serving</h5>
+                                    <div class="btn-group-student-filters now-serving-filters">
+                                        <button type="button"
+                                            class="btn btn-outline-primary now-serving-filter-btn active"
+                                            data-office-filter="all">
+                                            All
+                                        </button>
+                                        <button type="button" class="btn btn-outline-primary now-serving-filter-btn"
+                                            data-office-filter="registrar">
+                                            Registrar
+                                        </button>
+                                        <button type="button" class="btn btn-outline-primary now-serving-filter-btn"
+                                            data-office-filter="accounting">
+                                            Accounting
+                                        </button>
+                                    </div>
+                                </div>
+                                <div id="now-serving" class="mb-3">
+                                    <div class="row g-3" id="now-serving-row">
+                                        <div class="col-12 col-md-4 col-lg-3 now-serving-col" data-office="registrar"
+                                            data-service="submission_of_application_forms">
+                                            <div class="card now-serving-card">
+                                                <div class="card-body text-center">
+                                                    <div class="text-uppercase small text-muted fw-bold">Submission of
+                                                        Application Forms</div>
+                                                    <div class="now-serving-number"
+                                                        id="now-serving-submission_of_application_forms">—</div>
+                                                    <div class="small text-muted"
+                                                        id="now-serving-submission_of_application_forms-status">No one
+                                                        is being served</div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div class="col-12 col-md-4 col-lg-3 now-serving-col" data-office="registrar"
+                                            data-service="application_assessment_of_school_records">
+                                            <div class="card now-serving-card">
+                                                <div class="card-body text-center">
+                                                    <div class="text-uppercase small text-muted fw-bold">Application
+                                                        &amp; Assessment of School Records</div>
+                                                    <div class="now-serving-number"
+                                                        id="now-serving-application_assessment_of_school_records">—
+                                                    </div>
+                                                    <div class="small text-muted"
+                                                        id="now-serving-application_assessment_of_school_records-status">
+                                                        No one is being served</div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div class="col-12 col-md-4 col-lg-3 now-serving-col" data-office="registrar"
+                                            data-service="releasing_of_school_records">
+                                            <div class="card now-serving-card">
+                                                <div class="card-body text-center">
+                                                    <div class="text-uppercase small text-muted fw-bold">Releasing of
+                                                        School Records</div>
+                                                    <div class="now-serving-number"
+                                                        id="now-serving-releasing_of_school_records">—</div>
+                                                    <div class="small text-muted"
+                                                        id="now-serving-releasing_of_school_records-status">No one is
+                                                        being served</div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div class="col-12 col-md-4 col-lg-3 now-serving-col" data-office="registrar"
+                                            data-service="inquiry_follow_up">
+                                            <div class="card now-serving-card">
+                                                <div class="card-body text-center">
+                                                    <div class="text-uppercase small text-muted fw-bold">Inquiry &amp;
+                                                        Follow-Up</div>
+                                                    <div class="now-serving-number" id="now-serving-inquiry_follow_up">—
+                                                    </div>
+                                                    <div class="small text-muted"
+                                                        id="now-serving-inquiry_follow_up-status">No one is being served
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div class="col-12 col-md-4 col-lg-3 now-serving-col" data-office="registrar"
+                                            data-service="faculty_tagging_room_assignments">
+                                            <div class="card now-serving-card">
+                                                <div class="card-body text-center">
+                                                    <div class="text-uppercase small text-muted fw-bold">Faculty Tagging
+                                                        &amp; Room Assignments</div>
+                                                    <div class="now-serving-number"
+                                                        id="now-serving-faculty_tagging_room_assignments">—</div>
+                                                    <div class="small text-muted"
+                                                        id="now-serving-faculty_tagging_room_assignments-status">No one
+                                                        is being served</div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div class="col-12 col-md-4 col-lg-3 now-serving-col" data-office="accounting"
+                                            data-service="payment">
+                                            <div class="card now-serving-card">
+                                                <div class="card-body text-center">
+                                                    <div class="text-uppercase small text-muted fw-bold">Payment</div>
+                                                    <div class="now-serving-number" id="now-serving-payment">—</div>
+                                                    <div class="small text-muted" id="now-serving-payment-status">No one
+                                                        is being served</div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div class="col-12 col-md-4 col-lg-3 now-serving-col" data-office="accounting"
+                                            data-service="balance_inquiry">
+                                            <div class="card now-serving-card">
+                                                <div class="card-body text-center">
+                                                    <div class="text-uppercase small text-muted fw-bold">Balance Inquiry
+                                                    </div>
+                                                    <div class="now-serving-number" id="now-serving-balance_inquiry">—
+                                                    </div>
+                                                    <div class="small text-muted"
+                                                        id="now-serving-balance_inquiry-status">No one is being served
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div class="col-12 col-md-4 col-lg-3 now-serving-col" data-office="accounting"
+                                            data-service="claims">
+                                            <div class="card now-serving-card">
+                                                <div class="card-body text-center">
+                                                    <div class="text-uppercase small text-muted fw-bold">Claims</div>
+                                                    <div class="now-serving-number" id="now-serving-claims">—</div>
+                                                    <div class="small text-muted" id="now-serving-claims-status">No one
+                                                        is being served</div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </div>
