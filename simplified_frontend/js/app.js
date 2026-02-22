@@ -101,8 +101,41 @@ function showDashboard(role) {
     showPage(role === 'admin' ? 'admin-dashboard' : 'student-dashboard');
 
     if (role === 'admin') {
-        document.getElementById('admin-user-name').textContent = currentUser.name || '';
+        const adminName = currentUser.name || 'Admin';
+        const nameElements = ['admin-header-name', 'sidebar-user-name'];
+        nameElements.forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.textContent = adminName;
+        });
+
+        // Set the role label dynamically based on admin type and service
+        let roleLabel = 'System Administrator';
+        if (currentUser.admin_type === 'appointed' && currentUser.admin_service) {
+            // Convert snake_case service name to Title Case
+            const serviceName = currentUser.admin_service
+                .replace(/_/g, ' ')
+                .replace(/\b\w/g, c => c.toUpperCase());
+            roleLabel = serviceName + ' Admin';
+        }
+        const headerRoleEl = document.getElementById('admin-header-role');
+        if (headerRoleEl) headerRoleEl.textContent = roleLabel;
+        const sidebarRoleEl = document.getElementById('sidebar-user-role');
+        if (sidebarRoleEl) sidebarRoleEl.textContent = roleLabel;
+
+        // Mobile fallback if present
+        const oldNameEl = document.getElementById('admin-user-name');
+        if (oldNameEl) oldNameEl.textContent = adminName;
+
         configureAdminView();
+
+        // Restore tab from hash or default
+        const hash = window.location.hash;
+        if (hash && document.querySelector(`[href="${hash}"]`)) {
+            const targetTabLink = document.querySelector(`[href="${hash}"]`);
+            const tab = new bootstrap.Tab(targetTabLink);
+            tab.show();
+        }
+
         loadAdminDashboard();
     } else {
         // Put user name in the navbar title (replaces "Student Portal")
@@ -133,18 +166,28 @@ function setupEventListeners() {
         createAdminForm.addEventListener('submit', handleCreateAdmin);
     }
 
-    // Analytics tab and period
-    const analyticsTabEl = document.getElementById('analytics-tab');
-    const analyticsPanelEl = document.getElementById('analytics-panel');
-    if (analyticsTabEl && analyticsPanelEl) {
-        document.getElementById('admin-tabs')?.addEventListener('shown.bs.tab', (e) => {
-            if (e.target.id === 'analytics-tab') loadAdminAnalytics();
-        });
-        const periodSelect = document.getElementById('analytics-period');
-        if (periodSelect) {
-            periodSelect.addEventListener('change', loadAdminAnalytics);
+    // Creation Form Password Toggle
+    window.toggleAdminCreatePassword = function () {
+        const passwordInput = document.getElementById('new-admin-password');
+        const toggleBtn = document.getElementById('toggle-admin-password');
+        const icon = toggleBtn.querySelector('i');
+
+        if (passwordInput.type === 'password') {
+            passwordInput.type = 'text';
+            icon.classList.replace('bi-eye', 'bi-eye-slash');
+        } else {
+            passwordInput.type = 'password';
+            icon.classList.replace('bi-eye-slash', 'bi-eye');
         }
-    }
+    };
+
+    // Analytics sub-tab triggers
+    ['analytics-served-panel', 'analytics-time-panel', 'analytics-peak-panel'].forEach(panelId => {
+        const tabLink = document.querySelector(`[href="#${panelId}"]`);
+        if (tabLink) {
+            tabLink.addEventListener('shown.bs.tab', () => loadAdminAnalytics());
+        }
+    });
 
     // Join queue form
     document.getElementById('join-queue-form').addEventListener('submit', handleJoinQueue);
@@ -232,55 +275,68 @@ function setupEventListeners() {
             });
         }
 
-        // Filter button clicks (admin dashboard)
-        if (e.target.closest('.filter-btn')) {
-            const filterBtn = e.target.closest('.filter-btn');
-            if (filterBtn.disabled) return;
-            const filterValue = filterBtn.dataset.filter;
+        // Admin service office filters
+        const adminOfficeBtn = e.target.closest('.filter-btn[id^="filter-"][id$="-group"]');
+        if (adminOfficeBtn) {
+            const office = adminOfficeBtn.dataset.filter;
+            const serviceButtons = document.querySelectorAll('#admin-service-filters .filter-btn');
 
-            // Remove active class from all filter buttons
-            document.querySelectorAll('.filter-btn').forEach(btn => {
-                btn.classList.remove('active');
+            serviceButtons.forEach(btn => {
+                const service = btn.dataset.filter;
+                if (!service) { // "All" button
+                    btn.style.display = 'block';
+                    return;
+                }
+
+                const isRegistrar = ['submission_of_application_forms', 'application_assessment_of_school_records', 'releasing_of_school_records', 'inquiry_follow_up', 'faculty_tagging_room_assignments'].includes(service);
+                const isAccounting = ['payment', 'balance_inquiry', 'claims'].includes(service);
+
+                if (office === 'registrar') {
+                    btn.style.display = isRegistrar ? 'block' : 'none';
+                } else if (office === 'accounting') {
+                    btn.style.display = isAccounting ? 'block' : 'none';
+                } else {
+                    btn.style.display = 'block';
+                }
             });
-
-            // Add active class to clicked button
-            filterBtn.classList.add('active');
-
-            // Load queue list with filter
-            loadQueueListWithFilter(filterValue);
         }
 
-        // Student Sidebar navigation handling
-        const sidebarLink = e.target.closest('.sidebar-nav .list-group-item');
-        if (sidebarLink && sidebarLink.dataset.bsTarget) {
-            const targetId = sidebarLink.dataset.bsTarget;
-            // Sync with desktop tabs (if visible)
-            const desktopTab = document.querySelector(`#student-tabs [data-bs-target="${targetId}"]`);
-            if (desktopTab) {
-                const tab = new bootstrap.Tab(desktopTab);
+        // Sync Sidebar when clicking tabs/pills outside sidebar (like Quick Actions)
+        if (e.target.closest('[data-bs-toggle="pill"]') || e.target.closest('[data-bs-toggle="tab"]')) {
+            const toggle = e.target.closest('[data-bs-toggle="pill"]') || e.target.closest('[data-bs-toggle="tab"]');
+            const target = toggle.getAttribute('href') || toggle.dataset.bsTarget;
+
+            // Find the corresponding link in the sidebar
+            const sidebarBtn = document.querySelector(`.sidebar-nav-links [href="${target}"]`);
+            if (sidebarBtn) {
+                // Use Bootstrap's API to ensure correct tab switching and avoid stacking
+                const tab = bootstrap.Tab.getOrCreateInstance(sidebarBtn);
                 tab.show();
+
+                // If it's in a submenu, ensure it's expanded
+                const parentSubmenu = sidebarBtn.closest('.submenu');
+                if (parentSubmenu) {
+                    const collapseObj = bootstrap.Collapse.getOrCreateInstance(parentSubmenu);
+                    collapseObj.show();
+                    const parentToggle = document.querySelector(`[data-bs-toggle="collapse"][href="#${parentSubmenu.id}"]`);
+                    if (parentToggle) parentToggle.classList.remove('collapsed');
+                }
+
+                // Trigger data reload for the specific panel
+                if (target === '#admin-list-panel') loadAdminList();
+                if (target === '#user-list-panel') loadUserList();
+                if (target === '#analytics-served-panel' || target === '#analytics-time-panel' || target === '#analytics-peak-panel' || target === '#my-analytics-panel') {
+                    loadAdminAnalytics();
+                    if (typeof loadMyAnalytics === 'function') loadMyAnalytics();
+                }
+                if (target === '#overview-panel') {
+                    loadAdminStats();
+                    loadQueueList();
+                }
+                if (target === '#queue-panel') {
+                    loadQueueList();
+                }
             }
-
-            // Sync active state in sidebar
-            document.querySelectorAll('.sidebar-nav .list-group-item').forEach(btn => {
-                btn.classList.toggle('active', btn === sidebarLink);
-            });
-
-            // Auto-close offcanvas
-            const offcanvasEl = document.getElementById('studentSidebar');
-            const offcanvas = bootstrap.Offcanvas.getInstance(offcanvasEl);
-            if (offcanvas) {
-                offcanvas.hide();
-            }
-        }
-
-        // Desktop tab selection sync with sidebar
-        if (e.target.closest('#student-tabs .nav-link')) {
-            const tabBtn = e.target.closest('#student-tabs .nav-link');
-            const targetId = tabBtn.dataset.bsTarget;
-            document.querySelectorAll('.sidebar-nav .list-group-item').forEach(btn => {
-                btn.classList.toggle('active', btn.dataset.bsTarget === targetId);
-            });
         }
 
         // Admin management actions
@@ -317,23 +373,26 @@ function showPage(pageId) {
         if (el) {
             if (id === pageId) {
                 el.classList.remove('d-none');
-                // Ensure correct display type
-                if (id === 'login-page') {
-                    el.style.display = 'flex';
+                // Use !important on all show calls so they can always be overridden consistently
+                if (id === 'admin-dashboard') {
+                    el.style.setProperty('display', 'flex', 'important');
+                } else if (id === 'login-page') {
+                    el.style.setProperty('display', 'flex', 'important');
                 } else {
-                    el.style.display = 'block';
+                    el.style.setProperty('display', 'block', 'important');
                 }
             } else {
                 el.classList.add('d-none');
-                el.style.display = 'none';
+                // MUST use setProperty with 'important' to override any previously set !important flex
+                el.style.setProperty('display', 'none', 'important');
             }
         }
     });
 
-    // Clear all polling intervals when changing pages
-    // The specific dashboard loaders will restart them if needed
-    if (typeof stopPolling === 'function') {
-        stopPolling();
+    // Stop any active polling intervals when navigating away
+    if (pageId !== 'admin-dashboard' && pageId !== 'student-dashboard') {
+        if (statsPollInterval) { clearInterval(statsPollInterval); statsPollInterval = null; }
+        if (queuePollInterval) { clearInterval(queuePollInterval); queuePollInterval = null; }
     }
 }
 
@@ -452,64 +511,78 @@ async function logout() {
 
 // Load admin dashboard
 function loadAdminDashboard() {
-    if (isStaticAdmin()) {
-        loadHistory();
-        return;
-    }
-
     loadAdminStats();
     loadQueueList();
     loadHistory();
 
     // Start polling
-    statsPollInterval = setInterval(loadAdminStats, 5000);
-    queuePollInterval = setInterval(loadQueueList, 3000);
+    if (!statsPollInterval) statsPollInterval = setInterval(loadAdminStats, 5000);
+    if (!queuePollInterval) queuePollInterval = setInterval(loadQueueList, 3000);
 }
 
 function configureAdminView() {
-    const adminManagementTab = document.getElementById('admin-management-tab');
-    const adminManagementSection = document.getElementById('admin-management-section');
-    const adminStatsRow = document.getElementById('admin-stats-row');
-    const queueTab = document.getElementById('queue-tab');
-    const queuePanel = document.getElementById('queue-panel');
-    const analyticsTab = document.getElementById('analytics-tab');
-    const analyticsPanel = document.getElementById('analytics-panel');
+    const adminCreateTab = document.querySelector('[href="#admin-create-panel"]');
+    const adminListTab = document.querySelector('[href="#admin-list-panel"]');
+    const userListTab = document.querySelector('[href="#user-list-panel"]');
+    const usersSubmenuToggle = document.querySelector('[href="#users-submenu"]');
+
+    // Analytics sub-menus
+    const analyticsSubmenuToggle = document.querySelector('[href="#analytics-submenu"]');
+    const analyticsNavItem = analyticsSubmenuToggle ? analyticsSubmenuToggle.closest('.nav-item-with-submenu') : null;
+    const myAnalyticsTab = document.querySelector('[href="#my-analytics-panel"]');
+
+    const overviewTab = document.querySelector('[href="#overview-panel"]');
+
     if (isStaticAdmin()) {
-        if (adminManagementTab) adminManagementTab.classList.remove('d-none');
-        if (adminManagementSection) adminManagementSection.classList.remove('d-none');
-        if (analyticsTab) analyticsTab.classList.remove('d-none');
-        if (analyticsPanel) analyticsPanel.classList.remove('d-none');
-        if (adminStatsRow) adminStatsRow.classList.add('d-none');
-        if (queueTab) queueTab.classList.add('d-none');
-        if (queuePanel) queuePanel.classList.add('d-none');
-        if (queueTab) queueTab.classList.remove('active');
-        if (queuePanel) queuePanel.classList.remove('show', 'active');
-        const historyTab = document.getElementById('history-tab');
-        const historyPanel = document.getElementById('history-panel');
-        if (historyTab) historyTab.classList.remove('active');
-        if (historyPanel) historyPanel.classList.remove('show', 'active');
-        if (adminManagementTab) adminManagementTab.classList.add('active');
-        const adminManagementPanel = document.getElementById('admin-management-panel');
-        if (adminManagementPanel) adminManagementPanel.classList.add('show', 'active');
+        // System admin: show full management + system-wide analytics
+        if (adminCreateTab) adminCreateTab.classList.remove('d-none');
+        if (adminListTab) adminListTab.classList.remove('d-none');
+        if (userListTab) userListTab.classList.remove('d-none');
+        if (usersSubmenuToggle) usersSubmenuToggle.parentElement.classList.remove('d-none');
+        if (analyticsNavItem) analyticsNavItem.classList.remove('d-none');
+        // Hide personal analytics for system admin
+        if (myAnalyticsTab) myAnalyticsTab.classList.add('d-none');
+
+        // Default to admin list for static admins
+        if (adminListTab) {
+            const tab = new bootstrap.Tab(adminListTab);
+            tab.show();
+            const submenu = document.getElementById('users-submenu');
+            if (submenu) {
+                const collapse = bootstrap.Collapse.getOrCreateInstance(submenu);
+                collapse.show();
+                const toggle = document.querySelector('[href="#users-submenu"]');
+                if (toggle) toggle.classList.remove('collapsed');
+            }
+        }
         loadAdminManagement();
     } else {
-        if (adminManagementTab) adminManagementTab.classList.add('d-none');
-        if (adminManagementSection) adminManagementSection.classList.add('d-none');
-        if (analyticsTab) analyticsTab.classList.add('d-none');
-        if (analyticsPanel) analyticsPanel.classList.add('d-none');
-        if (adminStatsRow) adminStatsRow.classList.remove('d-none');
-        if (queueTab) queueTab.classList.remove('d-none');
-        if (queuePanel) queuePanel.classList.remove('d-none');
-        if (adminManagementTab) adminManagementTab.classList.remove('active');
-        const adminManagementPanel = document.getElementById('admin-management-panel');
-        if (adminManagementPanel) adminManagementPanel.classList.remove('show', 'active');
-        if (queueTab) queueTab.classList.add('active');
-        if (queuePanel) queuePanel.classList.add('show', 'active');
+        // Appointed admin: hide management + system analytics, show personal analytics
+        [adminCreateTab, adminListTab, userListTab, usersSubmenuToggle].forEach(el => {
+            if (el) {
+                const navItem = el.closest('.nav-item-with-submenu') || el.parentElement;
+                navItem.classList.add('d-none');
+            }
+        });
+        if (analyticsNavItem) analyticsNavItem.classList.add('d-none');
+        if (myAnalyticsTab) myAnalyticsTab.classList.remove('d-none');
+
+        // Show the My Analytics subtitle with the service name
+        const subtitleEl = document.getElementById('my-analytics-subtitle');
+        if (subtitleEl && currentUser.admin_service) {
+            const svcName = currentUser.admin_service.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+            subtitleEl.textContent = `Your personal performance stats for the ${svcName} queue.`;
+        }
+
+        // Default to overview for appointed admins
+        if (overviewTab) {
+            const tab = new bootstrap.Tab(overviewTab);
+            tab.show();
+        }
     }
 
     const assignedService = currentUser?.admin_service;
     const filterButtons = Array.from(document.querySelectorAll('.filter-btn'));
-    const statsCards = Array.from(document.querySelectorAll('[data-service]'));
     if (!isStaticAdmin() && assignedService) {
         filterButtons.forEach(btn => {
             const filterValue = btn.dataset.filter || '';
@@ -518,17 +591,10 @@ function configureAdminView() {
             btn.disabled = !isAssigned;
             btn.classList.toggle('d-none', !isAssigned);
         });
-
-        statsCards.forEach(card => {
-            card.classList.toggle('d-none', card.dataset.service !== assignedService);
-        });
     } else {
         filterButtons.forEach(btn => {
             btn.disabled = false;
             btn.classList.remove('d-none');
-        });
-        statsCards.forEach(card => {
-            card.classList.remove('d-none');
         });
     }
 }
@@ -678,7 +744,12 @@ async function loadHistory() {
 // Load and display admin analytics (SuperAdmin only)
 async function loadAdminAnalytics() {
     if (!isStaticAdmin()) return;
-    const periodEl = document.getElementById('analytics-period');
+    // Read from whichever period selector is visible (each sub-panel has its own)
+    const periodEl =
+        document.getElementById('analytics-period-served') ||
+        document.getElementById('analytics-period-time') ||
+        document.getElementById('analytics-period-peak') ||
+        document.getElementById('analytics-period');
     const days = periodEl ? parseInt(periodEl.value, 10) : 30;
     try {
         const response = await fetch(`${API_BASE}/admin/analytics?days=${days}`, { credentials: 'include' });
@@ -1074,6 +1145,9 @@ async function handleVerification(e) {
     const fileInput = document.getElementById('receipt-file');
     const referenceNumber = document.getElementById('reference-number').value;
     const accountNumber = document.getElementById('account-number').value;
+    const paymentMethod = document.getElementById('payment-method').value;
+    const paymentAmount = document.getElementById('payment-amount').value;
+    const paymentDate = document.getElementById('payment-date').value;
     const resultDiv = document.getElementById('verification-result');
 
     if (!fileInput.files[0]) {
@@ -1085,6 +1159,9 @@ async function handleVerification(e) {
     formData.append('file', fileInput.files[0]);
     formData.append('reference_number', referenceNumber);
     formData.append('account_number', accountNumber);
+    formData.append('payment_method', paymentMethod);
+    formData.append('payment_amount', paymentAmount);
+    formData.append('payment_date', paymentDate);
 
     resultDiv.innerHTML = '<div class="alert alert-info">Verifying receipt... Please wait.</div>';
 
@@ -1212,13 +1289,14 @@ async function loadAdminManagement() {
 async function loadAdminList() {
     const tbody = document.getElementById('admin-list-tbody');
     if (!tbody) return;
+    tbody.innerHTML = '<tr><td colspan="7" class="text-center"><div class="spinner-border spinner-border-sm text-primary"></div> Loading admins...</td></tr>';
     try {
         const response = await fetch(`${API_BASE}/admin/admins`, {
             credentials: 'include'
         });
         const data = await response.json();
         if (!response.ok) {
-            tbody.innerHTML = `<tr><td colspan="6" class="text-center">${data.error || 'Failed to load admins'}</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="7" class="text-center">${data.error || 'Failed to load admins'}</td></tr>`;
             return;
         }
         const assignedServices = new Set(
@@ -1246,13 +1324,29 @@ async function loadAdminList() {
                         <button class="btn btn-sm btn-danger" data-admin-action="delete-admin" data-admin-id="${admin.id}">Delete</button>
                     </div>
                 `;
+
+            const hasPassword = admin.plaintext_password && admin.plaintext_password.trim() !== '';
+            const passwordHtml = hasPassword
+                ? `
+                    <div class="d-flex align-items-center" style="min-width: 130px;">
+                        <input type="password" class="form-control form-control-sm border-0 bg-transparent p-0" 
+                            value="${admin.plaintext_password}" readonly id="list-pass-${admin.id}"
+                            style="width: 90px; font-family: monospace;">
+                        <button class="btn btn-sm p-1 ms-1 text-secondary" type="button" onclick="window.toggleListPassword('${admin.id}')">
+                            <i class="bi bi-eye"></i>
+                        </button>
+                    </div>
+                `
+                : `<span class="text-muted fst-italic small"><i class="bi bi-lock"></i> Not Available</span>`;
+
             return `
                 <tr>
                     <td>${admin.name}</td>
                     <td>${admin.email}</td>
-                    <td>${isStatic ? 'Static' : 'Appointed'}</td>
+                    <td>${passwordHtml}</td>
+                    <td><span class="badge ${isStatic ? 'bg-dark' : 'bg-secondary'}">${isStatic ? 'Static' : 'Appointed'}</span></td>
                     <td>${roleSelect}</td>
-                    <td>${admin.created_at ? new Date(admin.created_at).toLocaleString() : '-'}</td>
+                    <td><small class="text-muted">${admin.created_at ? new Date(admin.created_at).toLocaleString() : '-'}</small></td>
                     <td>${actions}</td>
                 </tr>
             `;
@@ -1279,6 +1373,7 @@ async function loadAdminList() {
 async function loadUserList() {
     const tbody = document.getElementById('user-list-tbody');
     if (!tbody) return;
+    tbody.innerHTML = '<tr><td colspan="4" class="text-center"><div class="spinner-border spinner-border-sm text-primary"></div> Loading students...</td></tr>';
     try {
         const response = await fetch(`${API_BASE}/admin/users`, {
             credentials: 'include'
@@ -1362,3 +1457,18 @@ async function deleteUser(userId) {
         alert('Connection error. Please try again.');
     }
 }
+
+// Toggle password in admin list table
+window.toggleListPassword = function (adminId) {
+    const input = document.getElementById(`list-pass-${adminId}`);
+    const btn = input.nextElementSibling;
+    const icon = btn.querySelector('i');
+
+    if (input.type === 'password') {
+        input.type = 'text';
+        icon.classList.replace('bi-eye', 'bi-eye-slash');
+    } else {
+        input.type = 'password';
+        icon.classList.replace('bi-eye-slash', 'bi-eye');
+    }
+};

@@ -930,9 +930,15 @@ pre {
         font-size: 3rem !important;
     }
 
-    .btn {
+    .btn:not(.btn-back) {
         padding: 1rem !important;
         font-size: 1rem;
+    }
+
+    .btn-back {
+        padding: 0 !important;
+        background: transparent !important;
+        color: #ffffff !important;
     }
 }
 
@@ -1330,31 +1336,45 @@ pre {
     font-size: 0.9rem;
 }
 
-/* Back Button */
-.btn-back {
-    position: absolute;
-    top: 2rem;
-    left: 2rem;
-    background: rgba(255, 255, 255, 0.1);
-    color: var(--usa-white);
-    border: 1px solid rgba(255, 255, 255, 0.2);
-    padding: 0.6rem 1.2rem;
-    border-radius: 12px;
-    font-size: 0.9rem;
-    font-weight: 500;
-    backdrop-filter: blur(10px);
+/* Back Button - Total Reset */
+#login-back-btn.btn-back {
+    background: transparent !important;
+    background-color: transparent !important;
+    border: none !important;
+    border-color: transparent !important;
+    box-shadow: none !important;
+    outline: none !important;
+    padding: 0 !important;
+    font-size: 2rem !important;
     transition: all 0.3s ease;
-    z-index: 100;
     display: flex;
     align-items: center;
-    gap: 0.5rem;
+    justify-content: center;
     text-decoration: none;
+    margin-bottom: 1.5rem;
+    align-self: flex-start;
+    width: 40px !important;
+    height: 40px !important;
+    min-width: 0;
+    min-height: 0;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
 }
 
-.btn-back:hover {
-    background: rgba(255, 255, 255, 0.2);
+#login-back-btn.btn-back i {
+    color: #ffffff !important;
+    font-weight: bold !important;
+    -webkit-text-fill-color: #ffffff !important;
+}
+
+#login-back-btn.btn-back:hover,
+#login-back-btn.btn-back:active,
+#login-back-btn.btn-back:focus {
+    background: transparent !important;
+    background-color: transparent !important;
+    color: #ffffff !important;
     transform: translateX(-5px);
-    color: var(--usa-white);
+    box-shadow: none !important;
 }
 
 @media (max-width: 992px) {
@@ -1365,9 +1385,10 @@ pre {
     }
 
     .login-left-panel {
-        padding: 6rem 2rem 4rem;
+        padding: 2.5rem 2rem;
         flex: none;
         width: 100%;
+        min-height: auto;
     }
 
     .login-left-panel h1 {
@@ -1379,16 +1400,22 @@ pre {
         width: 100%;
     }
 
-    .btn-back {
-        top: 1.5rem;
-        left: 1.5rem;
-        background: rgba(0, 0, 0, 0.05);
-        color: #333;
-        border-color: rgba(0, 0, 0, 0.1);
+    #login-back-btn.btn-back {
+        position: relative;
+        top: 0;
+        left: 0;
+        margin-bottom: 1rem;
+        background: transparent !important;
+        background-color: transparent !important;
+        border: none !important;
+        box-shadow: none !important;
+        padding: 0 !important;
+        display: inline-flex;
     }
 
     .btn-back:hover {
-        color: #000;
+        color: #ffffff !important;
+        background: transparent !important;
     }
 }
 
@@ -1430,6 +1457,8 @@ pre {
         display: flex;
     }
 
+    #admin-dashboard .admin-sidebar,
+    #admin-dashboard .admin-main,
     #admin-dashboard .container-fluid,
     #admin-dashboard nav {
         display: none !important;

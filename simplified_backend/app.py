@@ -6,7 +6,7 @@ import os
 from dotenv import load_dotenv
 import bcrypt
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta
 import json
 from werkzeug.utils import secure_filename
 from functools import wraps
@@ -15,16 +15,23 @@ import base64
 from io import BytesIO
 from PIL import Image
 from flask import send_from_directory
+import requests
 # Load environment variables
 load_dotenv()
+
 
 app = Flask(__name__)
 app.secret_key = os.getenv('SECRET_KEY', 'your-secret-key-change-in-production')
 app.config['UPLOAD_FOLDER'] = 'uploads'
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
-# Session cookie security for production HTTPS (Railway, etc.)
-app.config['SESSION_COOKIE_SECURE'] = os.getenv('SESSION_COOKIE_SECURE', 'false').lower() == 'true'
+
+# Session persistence configuration
+app.config['SESSION_PERMANENT'] = True
+app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=7)
+app.config['SESSION_COOKIE_HTTPONLY'] = True
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
+# Only set Secure=True in production HTTPS (not localhost)
+app.config['SESSION_COOKIE_SECURE'] = os.getenv('SESSION_COOKIE_SECURE', 'false').lower() == 'true'
 
 # Static admin credentials (first admin)
 STATIC_ADMIN_EMAIL = 'admin'
@@ -140,6 +147,7 @@ def init_db():
                 student_id VARCHAR(50),
                 course VARCHAR(100),
                 year VARCHAR(50),
+                plaintext_password VARCHAR(255) NULL,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
@@ -153,6 +161,10 @@ def init_db():
             cursor.execute(f"ALTER TABLE users ADD COLUMN admin_service ENUM({ADMIN_SERVICE_ENUM}) NULL")
         else:
             cursor.execute(f"ALTER TABLE users MODIFY COLUMN admin_service ENUM({ADMIN_SERVICE_ENUM}) NULL")
+        
+        cursor.execute("SHOW COLUMNS FROM users LIKE 'plaintext_password'")
+        if not cursor.fetchone():
+            cursor.execute("ALTER TABLE users ADD COLUMN plaintext_password VARCHAR(255) NULL")
         
         # Queue entries table
         cursor.execute("""
@@ -248,10 +260,14 @@ def ensure_static_admin():
             user_id = str(uuid.uuid4())
             hashed_password = hash_password(STATIC_ADMIN_PASSWORD)
             cursor.execute("""
-                INSERT INTO users (id, email, password, name, role, admin_type, admin_service)
-                VALUES (%s, %s, %s, %s, %s, %s, %s)
-            """, (user_id, STATIC_ADMIN_EMAIL, hashed_password, STATIC_ADMIN_NAME, 'admin', 'static', None))
-        # Backfill admin_type for existing admins
+                INSERT INTO users (id, email, password, name, role, admin_type, admin_service, plaintext_password)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+            """, (user_id, STATIC_ADMIN_EMAIL, hashed_password, STATIC_ADMIN_NAME, 'admin', 'static', None, STATIC_ADMIN_PASSWORD))
+        # Backfill plaintext_password for static admin if null
+        cursor.execute("""
+            UPDATE users SET plaintext_password = %s WHERE email = %s AND plaintext_password IS NULL
+        """, (STATIC_ADMIN_PASSWORD, STATIC_ADMIN_EMAIL))
+        
         cursor.execute("""
             UPDATE users
             SET admin_type = 'appointed'
@@ -394,7 +410,8 @@ def login():
     if not user or not check_password(password, user['password']):
         return jsonify({'error': 'Invalid email or password'}), 401
     
-    # Set session
+    # Set session and make it permanent (survives browser refresh)
+    session.permanent = True
     session['user_id'] = user['id']
     session['user_role'] = user['role']
     session['user_email'] = user['email']
@@ -738,9 +755,12 @@ def verify_receipt():
     file = request.files['file']
     reference_number = request.form.get('reference_number')
     account_number = request.form.get('account_number')
+    payment_method = request.form.get('payment_method')
+    payment_amount = request.form.get('payment_amount')
+    payment_date = request.form.get('payment_date')
     
-    if not reference_number or not account_number:
-        return jsonify({'error': 'Reference number and account number are required'}), 400
+    if not reference_number or not account_number or not payment_method or not payment_amount or not payment_date:
+        return jsonify({'error': 'Reference number, account number, payment method, amount, and date are required'}), 400
     
     if file.filename == '':
         return jsonify({'error': 'No file selected'}), 400
@@ -780,6 +800,38 @@ Determine if this is a valid receipt for the University of San Agustin accountin
         confidence_score = 95.0 if verified else 25.0
         verification_status = "VERIFIED" if verified else "NOT_VERIFIED"
         
+        # Optional: Secondary verification with n8n (if configured)
+        n8n_verified = False
+        n8n_url = os.getenv('N8N_WEBHOOK_URL')
+        if n8n_url:
+            try:
+                # Prepare data for n8n
+                # We send the fields and the file
+                file.seek(0) # Reset file pointer before sending
+                n8n_response = requests.post(
+                    n8n_url,
+                    data={
+                        'reference_number': reference_number,
+                        'account_number': account_number,
+                        'payment_method': payment_method,
+                        'payment_amount': payment_amount,
+                        'payment_date': payment_date,
+                        'user_id': user['id'],
+                        'user_name': user['name']
+                    },
+                    files={'file': (file.filename, image_data, file.content_type)},
+                    timeout=10
+                )
+                if n8n_response.status_code == 200:
+                    n8n_data = n8n_response.json()
+                    n8n_verified = n8n_data.get('verified', False)
+                    # If n8n confirmed it, we can boost the confidence
+                    if n8n_verified:
+                        confidence_score = max(confidence_score, 98.0)
+                        verification_status = "VERIFIED"
+            except Exception as n8n_err:
+                print(f"n8n integration error: {n8n_err}")
+
         # Save verification
         conn = get_db_connection()
         if not conn:
@@ -793,8 +845,12 @@ Determine if this is a valid receipt for the University of San Agustin accountin
             'size': len(image_data),
             'reference_number': reference_number,
             'account_number': account_number,
+            'payment_method': payment_method,
+            'payment_amount': payment_amount,
+            'payment_date': payment_date,
             'verification_status': verification_status,
-            'sheets_verified': True  # Mock - would check Google Sheets in production
+            'n8n_verified': n8n_verified,
+            'sheets_verified': n8n_verified # n8n handles the sheet check
         })
         
         cursor.execute("""
@@ -1013,7 +1069,7 @@ def list_admins():
         return jsonify({'error': 'Database connection failed'}), 500
     cursor = conn.cursor(dictionary=True)
     cursor.execute("""
-        SELECT id, email, name, role, admin_type, admin_service, created_at
+        SELECT id, email, name, role, admin_type, admin_service, created_at, plaintext_password
         FROM users
         WHERE role = 'admin'
         ORDER BY created_at DESC
@@ -1067,9 +1123,9 @@ def create_admin():
         user_id = str(uuid.uuid4())
         hashed_password = hash_password(password)
         cursor.execute("""
-            INSERT INTO users (id, email, password, name, role, admin_type, admin_service)
-            VALUES (%s, %s, %s, %s, %s, %s, %s)
-        """, (user_id, email, hashed_password, name, 'admin', 'appointed', admin_service))
+            INSERT INTO users (id, email, password, name, role, admin_type, admin_service, plaintext_password)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+        """, (user_id, email, hashed_password, name, 'admin', 'appointed', admin_service, password))
         conn.commit()
         cursor.close()
         conn.close()
@@ -1237,6 +1293,10 @@ def serve_static(path):
     return send_from_directory('../simplified_frontend', path)
 
 if __name__ == '__main__':
+    with app.app_context():
+        init_db()
+        ensure_static_admin()
+        
     os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
     port = int(os.environ.get("PORT", 5000))

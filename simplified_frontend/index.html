@@ -8,6 +8,7 @@
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
     <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" href="css/admin-layout.css">
 </head>
 
 <body>
@@ -86,12 +87,13 @@
         <!-- Login Page -->
         <div id="login-page" class="login-container d-none">
             <div class="login-split-wrapper">
-                <button class="btn btn-back" id="login-back-btn">
-                    <i class="bi bi-arrow-left"></i> Back
-                </button>
-
                 <!-- Left Panel -->
                 <div class="login-left-panel">
+                    <button class="btn btn-back" id="login-back-btn"
+                        style="background: transparent !important; background-color: transparent !important; border: none !important; box-shadow: none !important; padding: 0 !important; color: #ffffff !important; appearance: none !important;">
+                        <i class="bi bi-arrow-left"
+                            style="color: #ffffff !important; font-size: 2rem !important; -webkit-text-fill-color: #ffffff !important;"></i>
+                    </button>
                     <h1>Welcome to QueueUp</h1>
                     <p>The smartest way to handle your school transactions. Join lines from anywhere, anytime.</p>
                 </div>
@@ -142,7 +144,7 @@
         </div>
 
         <!-- Admin Dashboard -->
-        <div id="admin-dashboard" class="d-none">
+        <div id="admin-dashboard" class="d-none admin-layout">
             <div class="admin-mobile-restriction">
                 <i class="bi bi-display"></i>
                 <h2>Desktop Only Access</h2>
@@ -151,719 +153,965 @@
                 <button class="btn btn-outline-light mt-4" onclick="logout()">Logout</button>
             </div>
 
-            <nav class="navbar navbar-expand-lg navbar-dark bg-usa-red shadow-sm sticky-top">
-                <div class="container-fluid">
-                    <span class="navbar-brand mb-0 h1">
-                        <i class="bi bi-shield-check"></i> Admin Dashboard
-                    </span>
-                    <div>
-                        <span class="text-white me-3" id="admin-user-name"></span>
-                        <button class="btn btn-outline-light btn-sm" onclick="logout()">Logout</button>
-                    </div>
+            <!-- Sidebar -->
+            <aside class="admin-sidebar">
+                <div class="sidebar-brand">
+                    <img src="images/university-logo.png" alt="University Logo">
+                    <span>QueueUp Admin</span>
                 </div>
-            </nav>
+                <div class="sidebar-menu">
+                    <p class="menu-label">Main Menu</p>
+                    <nav class="nav flex-column sidebar-nav-links" id="admin-sidebar-nav">
+                        <a class="nav-link active" data-bs-toggle="pill" href="#overview-panel">
+                            <i class="bi bi-speedometer2"></i> <span>Dashboard</span>
+                        </a>
 
-            <div class="container-fluid mt-4">
-                <div class="row mb-4" id="admin-stats-row">
-                    <div class="col-12 col-md-6 col-lg-3">
-                        <div class="card text-white admin-stat-card admin-stat-waiting">
-                            <div class="card-body">
-                                <h5 class="card-title">Waiting</h5>
-                                <h2 id="stats-waiting">0</h2>
+                        <div class="nav-item-with-submenu">
+                            <a class="nav-link collapsed" data-bs-toggle="collapse" href="#queue-submenu" role="button"
+                                aria-expanded="false">
+                                <i class="bi bi-list-ul"></i> <span>Queues</span>
+                                <i class="bi bi-chevron-down ms-auto chevron"></i>
+                            </a>
+                            <div class="collapse submenu" id="queue-submenu">
+                                <a class="nav-link" data-bs-toggle="pill" href="#queue-panel">
+                                    <i class="bi bi-play-circle small"></i> Active Management
+                                </a>
+                                <a class="nav-link" data-bs-toggle="pill" href="#history-panel">
+                                    <i class="bi bi-clock-history small"></i> Transaction History
+                                </a>
                             </div>
                         </div>
-                    </div>
-                    <div class="col-12 col-md-6 col-lg-3">
-                        <div class="card text-white admin-stat-card admin-stat-served">
-                            <div class="card-body">
-                                <h5 class="card-title">Served Today</h5>
-                                <h2 id="stats-served">0</h2>
+
+                        <div class="nav-item-with-submenu">
+                            <a class="nav-link collapsed" data-bs-toggle="collapse" href="#analytics-submenu"
+                                role="button" aria-expanded="false">
+                                <i class="bi bi-graph-up"></i> <span>Analytics</span>
+                                <i class="bi bi-chevron-down ms-auto chevron"></i>
+                            </a>
+                            <div class="collapse submenu" id="analytics-submenu">
+                                <a class="nav-link" data-bs-toggle="pill" href="#analytics-served-panel">
+                                    <i class="bi bi-bar-chart small"></i> Numbers Served
+                                </a>
+                                <a class="nav-link" data-bs-toggle="pill" href="#analytics-time-panel">
+                                    <i class="bi bi-stopwatch small"></i> Avg Service Time
+                                </a>
+                                <a class="nav-link" data-bs-toggle="pill" href="#analytics-peak-panel">
+                                    <i class="bi bi-clock small"></i> Peak Hours
+                                </a>
                             </div>
                         </div>
-                    </div>
-                    <div class="col-6 col-md-4 col-lg-2" id="stats-card-submission_of_application_forms"
-                        data-service="submission_of_application_forms">
-                        <div class="card text-white">
-                            <div class="card-body">
-                                <h6 class="card-title">Application Forms</h6>
-                                <h4 id="stats-submission_of_application_forms">0</h4>
+
+                        <div class="nav-item-with-submenu">
+                            <a class="nav-link collapsed" data-bs-toggle="collapse" href="#users-submenu" role="button"
+                                aria-expanded="false">
+                                <i class="bi bi-people"></i> <span>Admin & Users</span>
+                                <i class="bi bi-chevron-down ms-auto chevron"></i>
+                            </a>
+                            <div class="collapse submenu" id="users-submenu">
+                                <a class="nav-link" data-bs-toggle="pill" href="#admin-create-panel">
+                                    <i class="bi bi-person-plus small"></i> Create Account
+                                </a>
+                                <a class="nav-link" data-bs-toggle="pill" href="#admin-list-panel">
+                                    <i class="bi bi-shield-lock small"></i> Admin List
+                                </a>
+                                <a class="nav-link" data-bs-toggle="pill" href="#user-list-panel">
+                                    <i class="bi bi-person-badge small"></i> Student List
+                                </a>
                             </div>
                         </div>
-                    </div>
-                    <div class="col-6 col-md-4 col-lg-2" id="stats-card-application_assessment_of_school_records"
-                        data-service="application_assessment_of_school_records">
-                        <div class="card text-white admin-stat-card admin-stat-service">
-                            <div class="card-body">
-                                <h6 class="card-title">Assessment</h6>
-                                <h4 id="stats-application_assessment_of_school_records">0</h4>
-                            </div>
+
+                        <a class="nav-link" data-bs-toggle="pill" href="#ai-panel">
+                            <i class="bi bi-robot"></i> <span>AI Assistant</span>
+                        </a>
+
+                        <a class="nav-link" href="#" onclick="logout(); return false;">
+                            <i class="bi bi-box-arrow-left"></i> <span>Logout</span>
+                        </a>
+                    </nav>
+                </div>
+                <div class="sidebar-footer">
+                    <div class="user-profile py-2" style="background: rgba(255,255,255,0.05); cursor: default;">
+                        <div class="user-avatar" style="width: 32px; height: 32px; font-size: 1rem;">
+                            <i class="bi bi-person-fill"></i>
                         </div>
-                    </div>
-                    <div class="col-6 col-md-4 col-lg-2" id="stats-card-releasing_of_school_records"
-                        data-service="releasing_of_school_records">
-                        <div class="card text-white">
-                            <div class="card-body">
-                                <h6 class="card-title">Releasing Records</h6>
-                                <h4 id="stats-releasing_of_school_records">0</h4>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="col-6 col-md-4 col-lg-2" id="stats-card-inquiry_follow_up"
-                        data-service="inquiry_follow_up">
-                        <div class="card text-white">
-                            <div class="card-body">
-                                <h6 class="card-title">Inquiry &amp; Follow-Up</h6>
-                                <h4 id="stats-inquiry_follow_up">0</h4>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="col-6 col-md-4 col-lg-2" id="stats-card-faculty_tagging_room_assignments"
-                        data-service="faculty_tagging_room_assignments">
-                        <div class="card text-white">
-                            <div class="card-body">
-                                <h6 class="card-title">Faculty &amp; Rooms</h6>
-                                <h4 id="stats-faculty_tagging_room_assignments">0</h4>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="col-6 col-md-4 col-lg-2" id="stats-card-payment" data-service="payment">
-                        <div class="card text-white">
-                            <div class="card-body">
-                                <h6 class="card-title">Payment</h6>
-                                <h4 id="stats-payment">0</h4>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="col-6 col-md-4 col-lg-2" id="stats-card-balance" data-service="balance_inquiry">
-                        <div class="card text-white bg-warning">
-                            <div class="card-body">
-                                <h6 class="card-title">Balance Inquiry</h6>
-                                <h4 id="stats-balance">0</h4>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="col-6 col-md-4 col-lg-2" id="stats-card-claims" data-service="claims">
-                        <div class="card text-white bg-secondary">
-                            <div class="card-body">
-                                <h6 class="card-title">Claims</h6>
-                                <h4 id="stats-claims">0</h4>
-                            </div>
+                        <div class="user-info ms-2 text-start">
+                            <span id="sidebar-user-name" class="text-white" style="font-size: 0.85rem;">Admin</span>
+                            <small id="sidebar-user-role" style="font-size: 0.7rem; opacity: 0.6;">System Admin</small>
                         </div>
                     </div>
                 </div>
+            </aside>
 
-                <ul class="nav nav-tabs" id="admin-tabs" role="tablist">
-                    <li class="nav-item" role="presentation">
-                        <button class="nav-link active" id="queue-tab" data-bs-toggle="tab"
-                            data-bs-target="#queue-panel" type="button">Queue Management</button>
-                    </li>
-                    <li class="nav-item" role="presentation">
-                        <button class="nav-link" id="history-tab" data-bs-toggle="tab" data-bs-target="#history-panel"
-                            type="button">Transaction History</button>
-                    </li>
-                    <li class="nav-item" role="presentation">
-                        <button class="nav-link d-none" id="analytics-tab" data-bs-toggle="tab"
-                            data-bs-target="#analytics-panel" type="button">Analytics</button>
-                    </li>
-                    <li class="nav-item" role="presentation">
-                        <button class="nav-link d-none" id="admin-management-tab" data-bs-toggle="tab"
-                            data-bs-target="#admin-management-panel" type="button">Admin Management</button>
-                    </li>
-                </ul>
+            <!-- Main Content -->
+            <main class="admin-main">
+                <header class="admin-header">
+                    <div class="header-search">
+                        <i class="bi bi-search"></i>
+                        <input type="text" placeholder="Search queues or students...">
+                    </div>
+                    <div class="header-actions">
+                        <div class="user-profile">
+                            <div class="user-info">
+                                <span id="admin-header-name">Admin User</span>
+                                <small id="admin-header-role">System Administrator</small>
+                            </div>
+                            <div class="user-avatar">
+                                <i class="bi bi-person-circle"></i>
+                            </div>
+                        </div>
+                    </div>
+                </header>
 
-                <div class="tab-content mt-3">
-                    <div class="tab-pane fade show active" id="queue-panel">
-                        <div class="mb-4">
-                            <label class="form-label fw-bold mb-3">Filter by Service</label>
-                            <div class="d-flex gap-2 flex-wrap">
-                                <button type="button" class="btn btn-outline-primary filter-btn active" id="filter-all"
-                                    data-filter="" style="flex: 1; min-width: 120px; padding: 0.75rem;">
-                                    <i class="bi bi-list-ul me-2"></i>All
-                                </button>
-                                <button type="button" class="btn btn-outline-primary filter-btn"
-                                    id="filter-submission_of_application_forms"
-                                    data-filter="submission_of_application_forms"
-                                    style="flex: 1; min-width: 120px; padding: 0.75rem;">
-                                    <i class="bi bi-file-earmark-plus me-2"></i>Application Forms
-                                </button>
-                                <button type="button" class="btn btn-outline-primary filter-btn"
-                                    id="filter-application_assessment_of_school_records"
-                                    data-filter="application_assessment_of_school_records"
-                                    style="flex: 1; min-width: 120px; padding: 0.75rem;">
-                                    <i class="bi bi-file-earmark-check me-2"></i>Assessment
-                                </button>
-                                <button type="button" class="btn btn-outline-primary filter-btn"
-                                    id="filter-releasing_of_school_records" data-filter="releasing_of_school_records"
-                                    style="flex: 1; min-width: 120px; padding: 0.75rem;">
-                                    <i class="bi bi-file-earmark-arrow-up me-2"></i>Releasing Records
-                                </button>
-                                <button type="button" class="btn btn-outline-primary filter-btn"
-                                    id="filter-inquiry_follow_up" data-filter="inquiry_follow_up"
-                                    style="flex: 1; min-width: 120px; padding: 0.75rem;">
-                                    <i class="bi bi-chat-dots me-2"></i>Inquiry &amp; Follow-Up
-                                </button>
-                                <button type="button" class="btn btn-outline-primary filter-btn"
-                                    id="filter-faculty_tagging_room_assignments"
-                                    data-filter="faculty_tagging_room_assignments"
-                                    style="flex: 1; min-width: 120px; padding: 0.75rem;">
-                                    <i class="bi bi-people me-2"></i>Faculty &amp; Rooms
-                                </button>
-                                <button type="button" class="btn btn-outline-primary filter-btn" id="filter-payment"
-                                    data-filter="payment" style="flex: 1; min-width: 120px; padding: 0.75rem;">
-                                    <i class="bi bi-credit-card-2-front me-2"></i>Payment
-                                </button>
-                                <button type="button" class="btn btn-outline-primary filter-btn" id="filter-balance"
-                                    data-filter="balance_inquiry" style="flex: 1; min-width: 120px; padding: 0.75rem;">
-                                    <i class="bi bi-wallet2 me-2"></i>Balance Inquiry
-                                </button>
-                                <button type="button" class="btn btn-outline-primary filter-btn" id="filter-claims"
-                                    data-filter="claims" style="flex: 1; min-width: 120px; padding: 0.75rem;">
-                                    <i class="bi bi-file-earmark-text me-2"></i>Claims
-                                </button>
+                <div class="admin-content-box pt-4">
+                    <div class="tab-content" id="adminTabContent">
+
+                        <!-- Overview Panel -->
+                        <div class="tab-pane fade show active" id="overview-panel">
+                            <div class="content-header">
+                                <h2>Dashboard</h2>
+                                <p>Welcome back! Here's an overview of your queuing platform.</p>
                             </div>
-                        </div>
-                        <div id="queue-list" class="row"></div>
-                    </div>
-                    <div class="tab-pane fade" id="analytics-panel">
-                        <div class="mb-4">
-                            <label class="form-label fw-bold me-2">Period</label>
-                            <select class="form-select d-inline-block w-auto" id="analytics-period">
-                                <option value="7">Last 7 days</option>
-                                <option value="14">Last 14 days</option>
-                                <option value="30" selected>Last 30 days</option>
-                                <option value="90">Last 90 days</option>
-                            </select>
-                        </div>
-                        <div class="row g-4 mb-4">
-                            <div class="col-12">
-                                <div class="card">
-                                    <div class="card-body">
-                                        <h5 class="card-title">Numbers Served by Admin</h5>
-                                        <canvas id="chart-numbers-served" height="120"></canvas>
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="col-12">
-                                <div class="card">
-                                    <div class="card-body">
-                                        <h5 class="card-title">Average Service Time (minutes) per Admin</h5>
-                                        <canvas id="chart-avg-service-time" height="120"></canvas>
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="col-12">
-                                <div class="card">
-                                    <div class="card-body">
-                                        <h5 class="card-title">Peak Hours (completions by hour)</h5>
-                                        <canvas id="chart-peak-hours" height="120"></canvas>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="tab-pane fade" id="history-panel">
-                        <div id="history-list" class="table-responsive">
-                            <table class="table table-striped">
-                                <thead>
-                                    <tr>
-                                        <th>Queue #</th>
-                                        <th>Name</th>
-                                        <th>Service</th>
-                                        <th>Status</th>
-                                        <th>Wait Time</th>
-                                        <th>Completed</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="history-tbody"></tbody>
-                            </table>
-                        </div>
-                    </div>
-                    <div class="tab-pane fade" id="admin-management-panel">
-                        <div id="admin-management-section" class="d-none">
-                            <div class="card mb-4">
-                                <div class="card-body">
-                                    <h5 class="card-title">Create New Admin</h5>
-                                    <form id="create-admin-form" class="row g-3">
-                                        <div class="col-md-4">
-                                            <label for="new-admin-name" class="form-label">Name</label>
-                                            <input type="text" class="form-control" id="new-admin-name" required>
+
+                            <div class="row g-4 mb-5" id="admin-stats-overview">
+                                <div class="col-12 col-md-4">
+                                    <div class="card text-white admin-stat-card admin-stat-waiting h-100">
+                                        <div class="card-body p-4">
+                                            <div class="d-flex justify-content-between align-items-center mb-3">
+                                                <h5 class="card-title mb-0">Waiting Now</h5>
+                                                <i class="bi bi-people-fill fs-3 opacity-50"></i>
+                                            </div>
+                                            <h2 id="stats-waiting" class="display-5 fw-bold mb-0">0</h2>
+                                            <p class="small mb-0 opacity-75 mt-2">Active students in queue</p>
                                         </div>
-                                        <div class="col-md-4">
-                                            <label for="new-admin-email" class="form-label">Email</label>
-                                            <input type="email" class="form-control" id="new-admin-email" required>
+                                    </div>
+                                </div>
+                                <div class="col-12 col-md-4">
+                                    <div class="card text-white admin-stat-card admin-stat-served h-100">
+                                        <div class="card-body p-4">
+                                            <div class="d-flex justify-content-between align-items-center mb-3">
+                                                <h5 class="card-title mb-0">Served Today</h5>
+                                                <i class="bi bi-check-circle-fill fs-3 opacity-50"></i>
+                                            </div>
+                                            <h2 id="stats-served" class="display-5 fw-bold mb-0">0</h2>
+                                            <p class="small mb-0 opacity-75 mt-2">Completed transactions</p>
                                         </div>
-                                        <div class="col-md-4">
-                                            <label for="new-admin-password" class="form-label">Password</label>
+                                    </div>
+                                </div>
+                                <div class="col-12 col-md-4">
+                                    <div class="card text-white admin-stat-card admin-stat-service h-100">
+                                        <div class="card-body p-4">
+                                            <div class="d-flex justify-content-between align-items-center mb-3">
+                                                <h5 class="card-title mb-0">Active Admins</h5>
+                                                <i class="bi bi-shield-check fs-3 opacity-50"></i>
+                                            </div>
+                                            <h2 class="display-5 fw-bold mb-0">8</h2>
+                                            <p class="small mb-0 opacity-75 mt-2">Across all departments</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="row g-4">
+                                <!-- Quick Actions (Matching Reference) -->
+                                <div class="col-lg-7">
+                                    <div class="dashboard-widget">
+                                        <h5 class="widget-title">Quick Actions</h5>
+                                        <div class="quick-action-list">
+                                            <a href="#queue-panel" class="quick-action-item" data-bs-toggle="pill">
+                                                <i class="bi bi-plus-circle"></i>
+                                                <span>Manage Active Queue</span>
+                                            </a>
+                                            <a href="#admin-create-panel" class="quick-action-item"
+                                                data-bs-toggle="pill">
+                                                <i class="bi bi-person-plus"></i>
+                                                <span>Create New Admin</span>
+                                            </a>
+                                            <a href="#analytics-served-panel" class="quick-action-item"
+                                                data-bs-toggle="pill">
+                                                <i class="bi bi-file-earmark-bar-graph"></i>
+                                                <span>Generate Weekly Report</span>
+                                            </a>
+                                            <a href="#history-panel" class="quick-action-item" data-bs-toggle="pill">
+                                                <i class="bi bi-clock-history"></i>
+                                                <span>Review Past Transactions</span>
+                                            </a>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Recent Activity (Matching Reference) -->
+                                <div class="col-lg-5">
+                                    <div class="dashboard-widget">
+                                        <h5 class="widget-title">System Activity</h5>
+                                        <div class="activity-list" id="admin-recent-activity">
+                                            <div class="activity-item">
+                                                <div class="activity-dot success"></div>
+                                                <div class="activity-content">
+                                                    <h6>System Initialized</h6>
+                                                    <p>QueueUp Admin Dashboard is ready for operations.</p>
+                                                </div>
+                                            </div>
+                                            <div class="activity-item">
+                                                <div class="activity-dot"></div>
+                                                <div class="activity-content">
+                                                    <h6>Daily Shift Started</h6>
+                                                    <p>Registrar and Accounting office queues are open.</p>
+                                                </div>
+                                            </div>
+                                            <div class="activity-item">
+                                                <div class="activity-dot warning"></div>
+                                                <div class="activity-content">
+                                                    <h6>Database Backup</h6>
+                                                    <p>Regular system check and data synchronization completed.</p>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Queue Management Panel -->
+                        <div class="tab-pane fade" id="queue-panel">
+                            <div class="content-header">
+                                <div class="d-flex justify-content-between align-items-end">
+                                    <div>
+                                        <h2>Queue Management</h2>
+                                        <p>Real-time oversight of current school transactions.</p>
+                                    </div>
+                                    <div class="mb-3">
+                                        <div class="btn-group shadow-sm">
+                                            <button type="button" class="btn btn-white border active filter-btn"
+                                                id="filter-all" data-filter="">All</button>
+                                            <button type="button" class="btn btn-white border filter-btn"
+                                                id="filter-registrar-group" data-filter="registrar">Registrar</button>
+                                            <button type="button" class="btn btn-white border filter-btn"
+                                                id="filter-accounting-group"
+                                                data-filter="accounting">Accounting</button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="card shadow-sm border-0 mb-4 p-3 bg-white" style="border-radius: 15px;">
+                                <div class="d-flex gap-2 flex-wrap" id="admin-service-filters">
+                                    <button type="button"
+                                        class="btn btn-outline-primary filter-btn active rounded-pill px-3 py-2 btn-sm"
+                                        id="filter-all-v2" data-filter="">
+                                        All Services
+                                    </button>
+                                    <button type="button"
+                                        class="btn btn-outline-primary filter-btn rounded-pill px-3 py-2 btn-sm"
+                                        data-filter="submission_of_application_forms">
+                                        Application Forms
+                                    </button>
+                                    <button type="button"
+                                        class="btn btn-outline-primary filter-btn rounded-pill px-3 py-2 btn-sm"
+                                        data-filter="application_assessment_of_school_records">
+                                        Assessment
+                                    </button>
+                                    <button type="button"
+                                        class="btn btn-outline-primary filter-btn rounded-pill px-3 py-2 btn-sm"
+                                        data-filter="releasing_of_school_records">
+                                        Releasing Records
+                                    </button>
+                                    <button type="button"
+                                        class="btn btn-outline-primary filter-btn rounded-pill px-3 py-2 btn-sm"
+                                        data-filter="inquiry_follow_up">
+                                        Inquiry & Follow-Up
+                                    </button>
+                                    <button type="button"
+                                        class="btn btn-outline-primary filter-btn rounded-pill px-3 py-2 btn-sm"
+                                        data-filter="faculty_tagging_room_assignments">
+                                        Faculty & Rooms
+                                    </button>
+                                    <button type="button"
+                                        class="btn btn-outline-primary filter-btn rounded-pill px-3 py-2 btn-sm"
+                                        data-filter="payment">
+                                        Payment
+                                    </button>
+                                    <button type="button"
+                                        class="btn btn-outline-secondary filter-btn rounded-pill px-3 py-2 btn-sm"
+                                        data-filter="balance_inquiry">
+                                        Balance Inquiry
+                                    </button>
+                                    <button type="button"
+                                        class="btn btn-outline-secondary filter-btn rounded-pill px-3 py-2 btn-sm"
+                                        data-filter="claims">
+                                        Claims
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div id="queue-list" class="row g-4"></div>
+                        </div>
+
+                        <!-- Analytics: Numbers Served Panel -->
+                        <div class="tab-pane fade" id="analytics-served-panel">
+                            <div class="content-header">
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <div>
+                                        <h2>Numbers Served by Admin</h2>
+                                        <p>Total service completions per administrator.</p>
+                                    </div>
+                                    <select class="form-select shadow-sm" id="analytics-period-served"
+                                        style="border-radius: 10px; width: auto;" onchange="loadAdminAnalytics()">
+                                        <option value="7">Last 7 days</option>
+                                        <option value="14">Last 14 days</option>
+                                        <option value="30" selected>Last 30 days</option>
+                                        <option value="90">Last 90 days</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="dashboard-widget">
+                                <canvas id="chart-numbers-served" height="280"></canvas>
+                            </div>
+                        </div>
+
+                        <!-- Analytics: Avg Service Time Panel -->
+                        <div class="tab-pane fade" id="analytics-time-panel">
+                            <div class="content-header">
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <div>
+                                        <h2>Average Service Time</h2>
+                                        <p>Mean minutes spent per transaction, by administrator.</p>
+                                    </div>
+                                    <select class="form-select shadow-sm" id="analytics-period-time"
+                                        style="border-radius: 10px; width: auto;" onchange="loadAdminAnalytics()">
+                                        <option value="7">Last 7 days</option>
+                                        <option value="14">Last 14 days</option>
+                                        <option value="30" selected>Last 30 days</option>
+                                        <option value="90">Last 90 days</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="dashboard-widget">
+                                <canvas id="chart-avg-service-time" height="280"></canvas>
+                            </div>
+                        </div>
+
+                        <!-- Analytics: Peak Hours Panel -->
+                        <div class="tab-pane fade" id="analytics-peak-panel">
+                            <div class="content-header">
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <div>
+                                        <h2>Peak Hours</h2>
+                                        <p>Busiest hours of the day based on completed transactions.</p>
+                                    </div>
+                                    <select class="form-select shadow-sm" id="analytics-period-peak"
+                                        style="border-radius: 10px; width: auto;" onchange="loadAdminAnalytics()">
+                                        <option value="7">Last 7 days</option>
+                                        <option value="14">Last 14 days</option>
+                                        <option value="30" selected>Last 30 days</option>
+                                        <option value="90">Last 90 days</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="dashboard-widget">
+                                <canvas id="chart-peak-hours" height="280"></canvas>
+                            </div>
+                        </div>
+
+                        <!-- History Panel -->
+                        <div class="tab-pane fade" id="history-panel">
+                            <div class="content-header">
+                                <h2>Transaction History</h2>
+                                <p>Comprehensive log of all completed and cancelled service requests.</p>
+                            </div>
+                            <div class="dashboard-widget">
+                                <div id="history-list" class="table-responsive">
+                                    <table class="table align-middle">
+                                        <thead>
+                                            <tr>
+                                                <th>Queue #</th>
+                                                <th>Name</th>
+                                                <th>Service</th>
+                                                <th>Status</th>
+                                                <th>Wait Time</th>
+                                                <th>Completed</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="history-tbody"></tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Create Admin Panel -->
+                        <div class="tab-pane fade" id="admin-create-panel">
+                            <div class="content-header">
+                                <h2>Create Admin</h2>
+                                <p>Register a new administrator for a specific department.</p>
+                            </div>
+                            <div class="dashboard-widget">
+                                <h5 class="widget-title">Account Details</h5>
+                                <form id="create-admin-form" class="row g-3">
+                                    <div class="col-md-4">
+                                        <label for="new-admin-name" class="form-label">Full Name</label>
+                                        <input type="text" class="form-control" id="new-admin-name"
+                                            placeholder="John Doe" required>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <label for="new-admin-email" class="form-label">University Email</label>
+                                        <input type="email" class="form-control" id="new-admin-email"
+                                            placeholder="admin@usa.edu.ph" required>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <label for="new-admin-password" class="form-label">Password</label>
+                                        <div class="input-group">
                                             <input type="password" class="form-control" id="new-admin-password"
-                                                required>
+                                                placeholder="••••••••" required>
+                                            <button class="btn btn-outline-secondary" type="button"
+                                                id="toggle-admin-password" onclick="toggleAdminCreatePassword()">
+                                                <i class="bi bi-eye"></i>
+                                            </button>
                                         </div>
-                                        <div class="col-md-4">
-                                            <label for="new-admin-role" class="form-label">Assigned Role</label>
-                                            <select class="form-select" id="new-admin-role" required>
-                                                <option value="submission_of_application_forms">Submission of
-                                                    Application Forms</option>
-                                                <option value="application_assessment_of_school_records">Application
-                                                    &amp; Assessment of School Records</option>
-                                                <option value="releasing_of_school_records">Releasing of School Records
-                                                </option>
-                                                <option value="inquiry_follow_up">Inquiry &amp; Follow-Up</option>
-                                                <option value="faculty_tagging_room_assignments">Faculty Tagging &amp;
-                                                    Room Assignments</option>
-                                                <option value="payment">Payment</option>
-                                                <option value="balance_inquiry">Balance Inquiry</option>
-                                                <option value="claims">Claims</option>
-                                            </select>
-                                        </div>
-                                        <div class="col-12">
-                                            <button type="submit" class="btn btn-primary">Create Admin</button>
-                                        </div>
-                                    </form>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label for="new-admin-role" class="form-label">Departmental Role</label>
+                                        <select class="form-select" id="new-admin-role" required>
+                                            <option value="">Select a role...</option>
+                                            <option value="submission_of_application_forms">Registrar: Submission of
+                                                Application Forms</option>
+                                            <option value="application_assessment_of_school_records">Registrar:
+                                                Assessment of School Records</option>
+                                            <option value="releasing_of_school_records">Registrar: Releasing of School
+                                                Records</option>
+                                            <option value="inquiry_follow_up">Registrar: Inquiry & Follow-Up</option>
+                                            <option value="faculty_tagging_room_assignments">Registrar: Faculty & Rooms
+                                            </option>
+                                            <option value="payment">Accounting: Payment</option>
+                                            <option value="balance_inquiry">Accounting: Balance Inquiry</option>
+                                            <option value="claims">Accounting: Claims</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-12 mt-4">
+                                        <button type="submit" class="btn btn-primary px-4 py-2"
+                                            style="border-radius: 10px;">
+                                            <i class="bi bi-plus-circle me-2"></i>Create Account
+                                        </button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+
+                        <!-- Admin List Panel -->
+                        <div class="tab-pane fade" id="admin-list-panel">
+                            <div class="content-header">
+                                <h2>Administrative Staff</h2>
+                                <p>View and manage all active administrator accounts.</p>
+                            </div>
+                            <div class="dashboard-widget">
+                                <div class="table-responsive">
+                                    <table class="table align-middle">
+                                        <thead>
+                                            <tr>
+                                                <th>Admin Name</th>
+                                                <th>Email</th>
+                                                <th>Password</th>
+                                                <th>Type</th>
+                                                <th>Assignment</th>
+                                                <th>Created</th>
+                                                <th>Actions</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="admin-list-tbody"></tbody>
+                                    </table>
                                 </div>
                             </div>
+                        </div>
 
-                            <div class="card mb-4">
-                                <div class="card-body">
-                                    <h5 class="card-title">Admins</h5>
-                                    <div class="table-responsive">
-                                        <table class="table table-striped">
-                                            <thead>
-                                                <tr>
-                                                    <th>Name</th>
-                                                    <th>Email</th>
-                                                    <th>Type</th>
-                                                    <th>Role</th>
-                                                    <th>Created</th>
-                                                    <th>Actions</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody id="admin-list-tbody"></tbody>
-                                        </table>
+                        <!-- Student List Panel -->
+                        <div class="tab-pane fade" id="user-list-panel">
+                            <div class="content-header">
+                                <h2>Registered Students</h2>
+                                <p>Manage student accounts and access levels.</p>
+                            </div>
+                            <div class="dashboard-widget">
+                                <div class="table-responsive">
+                                    <table class="table align-middle">
+                                        <thead>
+                                            <tr>
+                                                <th>Student Name</th>
+                                                <th>Email</th>
+                                                <th>Created</th>
+                                                <th>Actions</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="user-list-tbody"></tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- AI Assistant Panel (Coming Soon) -->
+                        <div class="tab-pane fade" id="ai-panel">
+                            <div class="content-header">
+                                <h2><i class="bi bi-robot me-2"></i>AI Assistant</h2>
+                                <p>Intelligent insights powered by artificial intelligence.</p>
+                            </div>
+                            <div class="dashboard-widget text-center py-5">
+                                <div style="margin-bottom: 2rem;">
+                                    <i class="bi bi-robot"
+                                        style="font-size: 5rem; color: var(--usa-red, #8B0000); opacity: 0.3;"></i>
+                                </div>
+                                <h3 class="fw-bold mb-2" style="color: #333;">Coming Soon</h3>
+                                <p class="text-muted mb-0" style="max-width: 400px; margin: 0 auto;">
+                                    The AI Assistant feature is currently under development. Stay tuned for intelligent
+                                    queue predictions, automated reporting, and real-time insights.
+                                </p>
+                                <div class="mt-4">
+                                    <span class="badge rounded-pill px-4 py-2"
+                                        style="background: linear-gradient(135deg, #8B0000, #C9A227); font-size: 0.85rem; letter-spacing: 1px;">
+                                        <i class="bi bi-hourglass-split me-1"></i> In Development
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Service Admin Personal Analytics Panel -->
+                        <div class="tab-pane fade" id="my-analytics-panel">
+                            <div class="content-header">
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <div>
+                                        <h2>My Analytics</h2>
+                                        <p id="my-analytics-subtitle">Your personal performance statistics.</p>
+                                    </div>
+                                    <select class="form-select shadow-sm" id="my-analytics-period"
+                                        style="border-radius: 10px; width: auto;" onchange="loadMyAnalytics()">
+                                        <option value="7">Last 7 days</option>
+                                        <option value="14">Last 14 days</option>
+                                        <option value="30" selected>Last 30 days</option>
+                                        <option value="90">Last 90 days</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="row g-4">
+                                <div class="col-12 col-md-4">
+                                    <div class="dashboard-widget text-center">
+                                        <h5 class="widget-title">Total Served</h5>
+                                        <div id="my-stat-served"
+                                            style="font-size: 3rem; font-weight: 700; color: var(--usa-red, #8B0000);">—
+                                        </div>
+                                        <p class="text-muted small mb-0">Customers served</p>
                                     </div>
                                 </div>
-                            </div>
-
-                            <div class="card">
-                                <div class="card-body">
-                                    <h5 class="card-title">Users</h5>
-                                    <div class="table-responsive">
-                                        <table class="table table-striped">
-                                            <thead>
-                                                <tr>
-                                                    <th>Name</th>
-                                                    <th>Email</th>
-                                                    <th>Created</th>
-                                                    <th>Actions</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody id="user-list-tbody"></tbody>
-                                        </table>
+                                <div class="col-12 col-md-4">
+                                    <div class="dashboard-widget text-center">
+                                        <h5 class="widget-title">Avg Service Time</h5>
+                                        <div id="my-stat-avg-time"
+                                            style="font-size: 3rem; font-weight: 700; color: #C9A227;">—</div>
+                                        <p class="text-muted small mb-0">Minutes per transaction</p>
+                                    </div>
+                                </div>
+                                <div class="col-12 col-md-4">
+                                    <div class="dashboard-widget text-center">
+                                        <h5 class="widget-title">Busiest Hour</h5>
+                                        <div id="my-stat-peak-hour"
+                                            style="font-size: 3rem; font-weight: 700; color: #2196F3;">—</div>
+                                        <p class="text-muted small mb-0">Peak activity time</p>
+                                    </div>
+                                </div>
+                                <div class="col-12">
+                                    <div class="dashboard-widget">
+                                        <h5 class="widget-title">My Daily Activity (Completions by Hour)</h5>
+                                        <canvas id="chart-my-peak-hours" height="200"></canvas>
                                     </div>
                                 </div>
                             </div>
                         </div>
-                    </div>
+
+                    </div> <!-- End Tab Content -->
+                </div> <!-- End Admin Content Box -->
+            </main>
+        </div>
+
+    </div> <!-- End Admin Dashboard Layout -->
+
+
+    <!-- Student Dashboard -->
+    <div id="student-dashboard" class="d-none">
+        <nav class="navbar navbar-dark navbar-student">
+            <div class="container-fluid">
+                <div class="d-flex align-items-center">
+                    <button class="btn btn-link text-white border-0 me-2 d-md-none" type="button"
+                        data-bs-toggle="offcanvas" data-bs-target="#studentSidebar" aria-controls="studentSidebar">
+                        <i class="bi bi-list fs-3"></i>
+                    </button>
+                    <span class="navbar-brand mb-0 h1">
+                        <i class="bi bi-person-circle"></i>
+                        <span id="student-navbar-title">Student</span>
+                    </span>
+                </div>
+                <div class="student-header-right">
+                    <span class="text-white me-3 student-user-name d-none" id="student-user-name"></span>
+                    <button class="btn btn-outline-light btn-sm student-logout-btn" onclick="logout()">Logout</button>
+                </div>
+            </div>
+        </nav>
+
+        <!-- Student Sidebar (Offcanvas) -->
+        <div class="offcanvas offcanvas-start" tabindex="-1" id="studentSidebar" aria-labelledby="studentSidebarLabel">
+            <div class="offcanvas-header bg-usa-red text-white">
+                <h5 class="offcanvas-title" id="studentSidebarLabel">
+                    <i class="bi bi-person-circle me-2"></i>Dashboard Menu
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="offcanvas"
+                    aria-label="Close"></button>
+            </div>
+            <div class="offcanvas-body p-0">
+                <div class="list-group list-group-flush sidebar-nav" role="tablist">
+                    <button class="list-group-item list-group-item-action active" data-bs-toggle="tab"
+                        data-bs-target="#join-queue-panel" type="button">
+                        <i class="bi bi-plus-circle me-3"></i>Join Queue
+                    </button>
+                    <button class="list-group-item list-group-item-action" data-bs-toggle="tab"
+                        data-bs-target="#now-serving-panel" type="button">
+                        <i class="bi bi-broadcast me-3"></i>Now Serving
+                    </button>
+                    <button class="list-group-item list-group-item-action" data-bs-toggle="tab"
+                        data-bs-target="#verification-panel" type="button">
+                        <i class="bi bi-patch-check me-3"></i>Receipt Verification
+                    </button>
+                    <button class="list-group-item list-group-item-action" data-bs-toggle="tab"
+                        data-bs-target="#student-history-panel" type="button">
+                        <i class="bi bi-clock-history me-3"></i>My History
+                    </button>
+                    <button class="list-group-item list-group-item-action text-danger mt-auto" onclick="logout()">
+                        <i class="bi bi-box-arrow-right me-3"></i>Logout
+                    </button>
                 </div>
             </div>
         </div>
 
+        <div class="container-fluid mt-4">
+            <ul class="nav nav-tabs d-none d-md-flex" id="student-tabs" role="tablist">
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link active" id="join-queue-tab" data-bs-toggle="tab"
+                        data-bs-target="#join-queue-panel" type="button">Join Queue</button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="now-serving-tab" data-bs-toggle="tab"
+                        data-bs-target="#now-serving-panel" type="button">Now Serving</button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="verification-tab" data-bs-toggle="tab"
+                        data-bs-target="#verification-panel" type="button">Receipt Verification</button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="student-history-tab" data-bs-toggle="tab"
+                        data-bs-target="#student-history-panel" type="button">My History</button>
+                </li>
+            </ul>
 
-        <!-- Student Dashboard -->
-        <div id="student-dashboard" class="d-none">
-            <nav class="navbar navbar-dark navbar-student">
-                <div class="container-fluid">
-                    <div class="d-flex align-items-center">
-                        <button class="btn btn-link text-white border-0 me-2 d-md-none" type="button"
-                            data-bs-toggle="offcanvas" data-bs-target="#studentSidebar" aria-controls="studentSidebar">
-                            <i class="bi bi-list fs-3"></i>
-                        </button>
-                        <span class="navbar-brand mb-0 h1">
-                            <i class="bi bi-person-circle"></i>
-                            <span id="student-navbar-title">Student</span>
-                        </span>
-                    </div>
-                    <div class="student-header-right">
-                        <span class="text-white me-3 student-user-name d-none" id="student-user-name"></span>
-                        <button class="btn btn-outline-light btn-sm student-logout-btn"
-                            onclick="logout()">Logout</button>
-                    </div>
-                </div>
-            </nav>
+            <div class="tab-content mt-3">
+                <div class="tab-pane fade show active" id="join-queue-panel">
+                    <div class="card">
+                        <div class="card-body">
+                            <h5 class="card-title mb-4">Join New Queue</h5>
 
-            <!-- Student Sidebar (Offcanvas) -->
-            <div class="offcanvas offcanvas-start" tabindex="-1" id="studentSidebar"
-                aria-labelledby="studentSidebarLabel">
-                <div class="offcanvas-header bg-usa-red text-white">
-                    <h5 class="offcanvas-title" id="studentSidebarLabel">
-                        <i class="bi bi-person-circle me-2"></i>Dashboard Menu
-                    </h5>
-                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="offcanvas"
-                        aria-label="Close"></button>
-                </div>
-                <div class="offcanvas-body p-0">
-                    <div class="list-group list-group-flush sidebar-nav" role="tablist">
-                        <button class="list-group-item list-group-item-action active" data-bs-toggle="tab"
-                            data-bs-target="#join-queue-panel" type="button">
-                            <i class="bi bi-plus-circle me-3"></i>Join Queue
-                        </button>
-                        <button class="list-group-item list-group-item-action" data-bs-toggle="tab"
-                            data-bs-target="#now-serving-panel" type="button">
-                            <i class="bi bi-broadcast me-3"></i>Now Serving
-                        </button>
-                        <button class="list-group-item list-group-item-action" data-bs-toggle="tab"
-                            data-bs-target="#verification-panel" type="button">
-                            <i class="bi bi-patch-check me-3"></i>Receipt Verification
-                        </button>
-                        <button class="list-group-item list-group-item-action" data-bs-toggle="tab"
-                            data-bs-target="#student-history-panel" type="button">
-                            <i class="bi bi-clock-history me-3"></i>My History
-                        </button>
-                        <button class="list-group-item list-group-item-action text-danger mt-auto" onclick="logout()">
-                            <i class="bi bi-box-arrow-right me-3"></i>Logout
-                        </button>
-                    </div>
-                </div>
-            </div>
-
-            <div class="container-fluid mt-4">
-                <ul class="nav nav-tabs d-none d-md-flex" id="student-tabs" role="tablist">
-                    <li class="nav-item" role="presentation">
-                        <button class="nav-link active" id="join-queue-tab" data-bs-toggle="tab"
-                            data-bs-target="#join-queue-panel" type="button">Join Queue</button>
-                    </li>
-                    <li class="nav-item" role="presentation">
-                        <button class="nav-link" id="now-serving-tab" data-bs-toggle="tab"
-                            data-bs-target="#now-serving-panel" type="button">Now Serving</button>
-                    </li>
-                    <li class="nav-item" role="presentation">
-                        <button class="nav-link" id="verification-tab" data-bs-toggle="tab"
-                            data-bs-target="#verification-panel" type="button">Receipt Verification</button>
-                    </li>
-                    <li class="nav-item" role="presentation">
-                        <button class="nav-link" id="student-history-tab" data-bs-toggle="tab"
-                            data-bs-target="#student-history-panel" type="button">My History</button>
-                    </li>
-                </ul>
-
-                <div class="tab-content mt-3">
-                    <div class="tab-pane fade show active" id="join-queue-panel">
-                        <div class="card">
-                            <div class="card-body">
-                                <h5 class="card-title mb-4">Join New Queue</h5>
-
-                                <!-- Priority Selection -->
-                                <div class="mb-4">
-                                    <label class="form-label fw-bold mb-3">Select Priority</label>
-                                    <div class="d-flex gap-2 flex-wrap">
-                                        <button type="button" class="btn btn-outline-primary priority-btn active"
-                                            data-priority="regular" style="flex: 1; min-width: 150px; padding: 1rem;">
-                                            <i class="bi bi-person-fill me-2"></i>Regular
-                                        </button>
-                                        <button type="button" class="btn btn-outline-primary priority-btn"
-                                            data-priority="senior_pwd"
-                                            style="flex: 1; min-width: 150px; padding: 1rem;">
-                                            <i class="bi bi-heart-fill me-2"></i>Senior/PWD
-                                        </button>
-                                    </div>
+                            <!-- Priority Selection -->
+                            <div class="mb-4">
+                                <label class="form-label fw-bold mb-3">Select Priority</label>
+                                <div class="d-flex gap-2 flex-wrap">
+                                    <button type="button" class="btn btn-outline-primary priority-btn active"
+                                        data-priority="regular" style="flex: 1; min-width: 150px; padding: 1rem;">
+                                        <i class="bi bi-person-fill me-2"></i>Regular
+                                    </button>
+                                    <button type="button" class="btn btn-outline-primary priority-btn"
+                                        data-priority="senior_pwd" style="flex: 1; min-width: 150px; padding: 1rem;">
+                                        <i class="bi bi-heart-fill me-2"></i>Senior/PWD
+                                    </button>
                                 </div>
-
-                                <!-- Service Selection -->
-                                <div class="mb-4">
-                                    <div class="d-flex flex-wrap gap-2 align-items-center mb-3">
-                                        <label class="form-label fw-bold mb-0 me-2">Select Service</label>
-                                        <div class="btn-group-student-filters">
-                                            <button type="button"
-                                                class="btn btn-outline-primary service-filter-btn active"
-                                                data-office-filter="accounting">
-                                                Accounting
-                                            </button>
-                                            <button type="button" class="btn btn-outline-primary service-filter-btn"
-                                                data-office-filter="registrar">
-                                                Registrar
-                                            </button>
-                                        </div>
-                                    </div>
-
-                                    <!-- Registrar Services -->
-                                    <div class="service-office-group registrar-group" data-office="registrar"
-                                        style="display: none;">
-                                        <div class="service-office-header">
-                                            <h6 class="mb-1">Registrar Services</h6>
-                                            <p class="text-muted small mb-0">Student records, applications, and academic
-                                                requests</p>
-                                        </div>
-                                        <div class="service-grid row g-3 mt-2">
-                                            <div class="col-12 col-md-6 col-lg-3">
-                                                <button type="button" class="btn service-btn w-100 service-card"
-                                                    data-service="submission_of_application_forms"
-                                                    style="padding: 2rem 1rem; height: 100%;">
-                                                    <div class="service-card-top-row">
-                                                        <span
-                                                            class="service-office-pill registrar-pill">Registrar</span>
-                                                    </div>
-                                                    <i class="bi bi-file-earmark-plus service-icon"
-                                                        style="font-size: 2.5rem; margin-bottom: 1rem;"></i>
-                                                    <h5 class="fw-bold mb-2">Submission of Application Forms</h5>
-                                                    <p class="text-muted small mb-0">Submit application requirements</p>
-                                                </button>
-                                            </div>
-                                            <div class="col-12 col-md-6 col-lg-3">
-                                                <button type="button" class="btn service-btn w-100 service-card"
-                                                    data-service="application_assessment_of_school_records"
-                                                    style="padding: 2rem 1rem; height: 100%;">
-                                                    <div class="service-card-top-row">
-                                                        <span
-                                                            class="service-office-pill registrar-pill">Registrar</span>
-                                                    </div>
-                                                    <i class="bi bi-file-earmark-check service-icon"
-                                                        style="font-size: 2.5rem; margin-bottom: 1rem;"></i>
-                                                    <h5 class="fw-bold mb-2">Application &amp; Assessment of School
-                                                        Records</h5>
-                                                    <p class="text-muted small mb-0">Evaluate school record requirements
-                                                    </p>
-                                                </button>
-                                            </div>
-                                            <div class="col-12 col-md-6 col-lg-3">
-                                                <button type="button" class="btn service-btn w-100 service-card"
-                                                    data-service="releasing_of_school_records"
-                                                    style="padding: 2rem 1rem; height: 100%;">
-                                                    <div class="service-card-top-row">
-                                                        <span
-                                                            class="service-office-pill registrar-pill">Registrar</span>
-                                                    </div>
-                                                    <i class="bi bi-file-earmark-arrow-up service-icon"
-                                                        style="font-size: 2.5rem; margin-bottom: 1rem;"></i>
-                                                    <h5 class="fw-bold mb-2">Releasing of School Records</h5>
-                                                    <p class="text-muted small mb-0">Request official records release
-                                                    </p>
-                                                </button>
-                                            </div>
-                                            <div class="col-12 col-md-6 col-lg-3">
-                                                <button type="button" class="btn service-btn w-100 service-card"
-                                                    data-service="inquiry_follow_up"
-                                                    style="padding: 2rem 1rem; height: 100%;">
-                                                    <div class="service-card-top-row">
-                                                        <span
-                                                            class="service-office-pill registrar-pill">Registrar</span>
-                                                    </div>
-                                                    <i class="bi bi-chat-dots service-icon"
-                                                        style="font-size: 2.5rem; margin-bottom: 1rem;"></i>
-                                                    <h5 class="fw-bold mb-2">Inquiry &amp; Follow-Up</h5>
-                                                    <p class="text-muted small mb-0">Ask questions or follow up requests
-                                                    </p>
-                                                </button>
-                                            </div>
-                                            <div class="col-12 col-md-6 col-lg-3">
-                                                <button type="button" class="btn service-btn w-100 service-card"
-                                                    data-service="faculty_tagging_room_assignments"
-                                                    style="padding: 2rem 1rem; height: 100%;">
-                                                    <div class="service-card-top-row">
-                                                        <span
-                                                            class="service-office-pill registrar-pill">Registrar</span>
-                                                    </div>
-                                                    <i class="bi bi-people service-icon"
-                                                        style="font-size: 2.5rem; margin-bottom: 1rem;"></i>
-                                                    <h5 class="fw-bold mb-2">Faculty Tagging &amp; Room Assignments</h5>
-                                                    <p class="text-muted small mb-0">Tag faculty and assign rooms</p>
-                                                </button>
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    <!-- Accounting Services -->
-                                    <div class="service-office-group accounting-group mt-3" data-office="accounting">
-                                        <div class="service-office-header">
-                                            <h6 class="mb-1">Accounting Services</h6>
-                                            <p class="text-muted small mb-0">Payments, balances, and claim processing
-                                            </p>
-                                        </div>
-                                        <div class="service-grid row g-3 mt-2">
-                                            <div class="col-12 col-md-6 col-lg-3">
-                                                <button type="button" class="btn service-btn w-100 service-card"
-                                                    data-service="payment" style="padding: 2rem 1rem; height: 100%;">
-                                                    <div class="service-card-top-row">
-                                                        <span
-                                                            class="service-office-pill accounting-pill">Accounting</span>
-                                                    </div>
-                                                    <i class="bi bi-credit-card-2-front service-icon"
-                                                        style="font-size: 2.5rem; margin-bottom: 1rem;"></i>
-                                                    <h5 class="fw-bold mb-2">Payment</h5>
-                                                    <p class="text-muted small mb-0">Make payments for tuition and fees
-                                                    </p>
-                                                </button>
-                                            </div>
-                                            <div class="col-12 col-md-6 col-lg-3">
-                                                <button type="button" class="btn service-btn w-100 service-card"
-                                                    data-service="balance_inquiry"
-                                                    style="padding: 2rem 1rem; height: 100%;">
-                                                    <div class="service-card-top-row">
-                                                        <span
-                                                            class="service-office-pill accounting-pill">Accounting</span>
-                                                    </div>
-                                                    <i class="bi bi-wallet2 service-icon"
-                                                        style="font-size: 2.5rem; margin-bottom: 1rem;"></i>
-                                                    <h5 class="fw-bold mb-2">Balance Inquiry</h5>
-                                                    <p class="text-muted small mb-0">Check your account balance</p>
-                                                </button>
-                                            </div>
-                                            <div class="col-12 col-md-6 col-lg-3">
-                                                <button type="button" class="btn service-btn w-100 service-card"
-                                                    data-service="claims" style="padding: 2rem 1rem; height: 100%;">
-                                                    <div class="service-card-top-row">
-                                                        <span
-                                                            class="service-office-pill accounting-pill">Accounting</span>
-                                                    </div>
-                                                    <i class="bi bi-file-earmark-text service-icon"
-                                                        style="font-size: 2.5rem; margin-bottom: 1rem;"></i>
-                                                    <h5 class="fw-bold mb-2">Claims</h5>
-                                                    <p class="text-muted small mb-0">Submit and process claims</p>
-                                                </button>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <!-- Hidden form for submission -->
-                                <form id="join-queue-form" style="display: none;">
-                                    <input type="hidden" id="service-type" name="service_type" required>
-                                    <input type="hidden" id="priority" name="priority" value="regular">
-                                </form>
                             </div>
-                        </div>
-                    </div>
 
-                    <div class="tab-pane fade" id="now-serving-panel">
-                        <div class="card">
-                            <div class="card-body">
-                                <div class="mb-4">
-                                    <h5 class="card-title">My Current Queue</h5>
-                                    <div id="my-queue-status" class="alert alert-info">No active queue</div>
-                                </div>
-                                <hr>
-                                <div class="d-flex flex-wrap align-items-center justify-content-between mb-2">
-                                    <h5 class="card-title mb-0">Now Serving</h5>
-                                    <div class="btn-group-student-filters now-serving-filters">
-                                        <button type="button"
-                                            class="btn btn-outline-primary now-serving-filter-btn active"
-                                            data-office-filter="all">
-                                            All
-                                        </button>
-                                        <button type="button" class="btn btn-outline-primary now-serving-filter-btn"
-                                            data-office-filter="registrar">
-                                            Registrar
-                                        </button>
-                                        <button type="button" class="btn btn-outline-primary now-serving-filter-btn"
+                            <!-- Service Selection -->
+                            <div class="mb-4">
+                                <div class="d-flex flex-wrap gap-2 align-items-center mb-3">
+                                    <label class="form-label fw-bold mb-0 me-2">Select Service</label>
+                                    <div class="btn-group-student-filters">
+                                        <button type="button" class="btn btn-outline-primary service-filter-btn active"
                                             data-office-filter="accounting">
                                             Accounting
                                         </button>
+                                        <button type="button" class="btn btn-outline-primary service-filter-btn"
+                                            data-office-filter="registrar">
+                                            Registrar
+                                        </button>
                                     </div>
                                 </div>
-                                <div id="now-serving" class="mb-3">
-                                    <div class="row g-3" id="now-serving-row">
-                                        <div class="col-12 col-md-4 col-lg-3 now-serving-col" data-office="registrar"
-                                            data-service="submission_of_application_forms">
-                                            <div class="card now-serving-card">
-                                                <div class="card-body text-center">
-                                                    <div class="text-uppercase small text-muted fw-bold">Submission of
-                                                        Application Forms</div>
-                                                    <div class="now-serving-number"
-                                                        id="now-serving-submission_of_application_forms">—</div>
-                                                    <div class="small text-muted"
-                                                        id="now-serving-submission_of_application_forms-status">No one
-                                                        is being served</div>
+
+                                <!-- Registrar Services -->
+                                <div class="service-office-group registrar-group" data-office="registrar"
+                                    style="display: none;">
+                                    <div class="service-office-header">
+                                        <h6 class="mb-1">Registrar Services</h6>
+                                        <p class="text-muted small mb-0">Student records, applications, and academic
+                                            requests</p>
+                                    </div>
+                                    <div class="service-grid row g-3 mt-2">
+                                        <div class="col-12 col-md-6 col-lg-3">
+                                            <button type="button" class="btn service-btn w-100 service-card"
+                                                data-service="submission_of_application_forms"
+                                                style="padding: 2rem 1rem; height: 100%;">
+                                                <div class="service-card-top-row">
+                                                    <span class="service-office-pill registrar-pill">Registrar</span>
+                                                </div>
+                                                <i class="bi bi-file-earmark-plus service-icon"
+                                                    style="font-size: 2.5rem; margin-bottom: 1rem;"></i>
+                                                <h5 class="fw-bold mb-2">Submission of Application Forms</h5>
+                                                <p class="text-muted small mb-0">Submit application requirements</p>
+                                            </button>
+                                        </div>
+                                        <div class="col-12 col-md-6 col-lg-3">
+                                            <button type="button" class="btn service-btn w-100 service-card"
+                                                data-service="application_assessment_of_school_records"
+                                                style="padding: 2rem 1rem; height: 100%;">
+                                                <div class="service-card-top-row">
+                                                    <span class="service-office-pill registrar-pill">Registrar</span>
+                                                </div>
+                                                <i class="bi bi-file-earmark-check service-icon"
+                                                    style="font-size: 2.5rem; margin-bottom: 1rem;"></i>
+                                                <h5 class="fw-bold mb-2">Application &amp; Assessment of School
+                                                    Records</h5>
+                                                <p class="text-muted small mb-0">Evaluate school record requirements
+                                                </p>
+                                            </button>
+                                        </div>
+                                        <div class="col-12 col-md-6 col-lg-3">
+                                            <button type="button" class="btn service-btn w-100 service-card"
+                                                data-service="releasing_of_school_records"
+                                                style="padding: 2rem 1rem; height: 100%;">
+                                                <div class="service-card-top-row">
+                                                    <span class="service-office-pill registrar-pill">Registrar</span>
+                                                </div>
+                                                <i class="bi bi-file-earmark-arrow-up service-icon"
+                                                    style="font-size: 2.5rem; margin-bottom: 1rem;"></i>
+                                                <h5 class="fw-bold mb-2">Releasing of School Records</h5>
+                                                <p class="text-muted small mb-0">Request official records release
+                                                </p>
+                                            </button>
+                                        </div>
+                                        <div class="col-12 col-md-6 col-lg-3">
+                                            <button type="button" class="btn service-btn w-100 service-card"
+                                                data-service="inquiry_follow_up"
+                                                style="padding: 2rem 1rem; height: 100%;">
+                                                <div class="service-card-top-row">
+                                                    <span class="service-office-pill registrar-pill">Registrar</span>
+                                                </div>
+                                                <i class="bi bi-chat-dots service-icon"
+                                                    style="font-size: 2.5rem; margin-bottom: 1rem;"></i>
+                                                <h5 class="fw-bold mb-2">Inquiry &amp; Follow-Up</h5>
+                                                <p class="text-muted small mb-0">Ask questions or follow up requests
+                                                </p>
+                                            </button>
+                                        </div>
+                                        <div class="col-12 col-md-6 col-lg-3">
+                                            <button type="button" class="btn service-btn w-100 service-card"
+                                                data-service="faculty_tagging_room_assignments"
+                                                style="padding: 2rem 1rem; height: 100%;">
+                                                <div class="service-card-top-row">
+                                                    <span class="service-office-pill registrar-pill">Registrar</span>
+                                                </div>
+                                                <i class="bi bi-people service-icon"
+                                                    style="font-size: 2.5rem; margin-bottom: 1rem;"></i>
+                                                <h5 class="fw-bold mb-2">Faculty Tagging &amp; Room Assignments</h5>
+                                                <p class="text-muted small mb-0">Tag faculty and assign rooms</p>
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Accounting Services -->
+                                <div class="service-office-group accounting-group mt-3" data-office="accounting">
+                                    <div class="service-office-header">
+                                        <h6 class="mb-1">Accounting Services</h6>
+                                        <p class="text-muted small mb-0">Payments, balances, and claim processing
+                                        </p>
+                                    </div>
+                                    <div class="service-grid row g-3 mt-2">
+                                        <div class="col-12 col-md-6 col-lg-3">
+                                            <button type="button" class="btn service-btn w-100 service-card"
+                                                data-service="payment" style="padding: 2rem 1rem; height: 100%;">
+                                                <div class="service-card-top-row">
+                                                    <span class="service-office-pill accounting-pill">Accounting</span>
+                                                </div>
+                                                <i class="bi bi-credit-card-2-front service-icon"
+                                                    style="font-size: 2.5rem; margin-bottom: 1rem;"></i>
+                                                <h5 class="fw-bold mb-2">Payment</h5>
+                                                <p class="text-muted small mb-0">Make payments for tuition and fees
+                                                </p>
+                                            </button>
+                                        </div>
+                                        <div class="col-12 col-md-6 col-lg-3">
+                                            <button type="button" class="btn service-btn w-100 service-card"
+                                                data-service="balance_inquiry"
+                                                style="padding: 2rem 1rem; height: 100%;">
+                                                <div class="service-card-top-row">
+                                                    <span class="service-office-pill accounting-pill">Accounting</span>
+                                                </div>
+                                                <i class="bi bi-wallet2 service-icon"
+                                                    style="font-size: 2.5rem; margin-bottom: 1rem;"></i>
+                                                <h5 class="fw-bold mb-2">Balance Inquiry</h5>
+                                                <p class="text-muted small mb-0">Check your account balance</p>
+                                            </button>
+                                        </div>
+                                        <div class="col-12 col-md-6 col-lg-3">
+                                            <button type="button" class="btn service-btn w-100 service-card"
+                                                data-service="claims" style="padding: 2rem 1rem; height: 100%;">
+                                                <div class="service-card-top-row">
+                                                    <span class="service-office-pill accounting-pill">Accounting</span>
+                                                </div>
+                                                <i class="bi bi-file-earmark-text service-icon"
+                                                    style="font-size: 2.5rem; margin-bottom: 1rem;"></i>
+                                                <h5 class="fw-bold mb-2">Claims</h5>
+                                                <p class="text-muted small mb-0">Submit and process claims</p>
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Hidden form for submission -->
+                            <form id="join-queue-form" style="display: none;">
+                                <input type="hidden" id="service-type" name="service_type" required>
+                                <input type="hidden" id="priority" name="priority" value="regular">
+                            </form>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="tab-pane fade" id="now-serving-panel">
+                    <div class="card">
+                        <div class="card-body">
+                            <div class="mb-4">
+                                <h5 class="card-title">My Current Queue</h5>
+                                <div id="my-queue-status" class="alert alert-info">No active queue</div>
+                            </div>
+                            <hr>
+                            <div class="d-flex flex-wrap align-items-center justify-content-between mb-2">
+                                <h5 class="card-title mb-0">Now Serving</h5>
+                                <div class="btn-group-student-filters now-serving-filters">
+                                    <button type="button" class="btn btn-outline-primary now-serving-filter-btn active"
+                                        data-office-filter="all">
+                                        All
+                                    </button>
+                                    <button type="button" class="btn btn-outline-primary now-serving-filter-btn"
+                                        data-office-filter="registrar">
+                                        Registrar
+                                    </button>
+                                    <button type="button" class="btn btn-outline-primary now-serving-filter-btn"
+                                        data-office-filter="accounting">
+                                        Accounting
+                                    </button>
+                                </div>
+                            </div>
+                            <div id="now-serving" class="mb-3">
+                                <div class="row g-3" id="now-serving-row">
+                                    <div class="col-12 col-md-4 col-lg-3 now-serving-col" data-office="registrar"
+                                        data-service="submission_of_application_forms">
+                                        <div class="card now-serving-card">
+                                            <div class="card-body text-center">
+                                                <div class="text-uppercase small text-muted fw-bold">Submission of
+                                                    Application Forms</div>
+                                                <div class="now-serving-number"
+                                                    id="now-serving-submission_of_application_forms">—</div>
+                                                <div class="small text-muted"
+                                                    id="now-serving-submission_of_application_forms-status">No one
+                                                    is being served</div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="col-12 col-md-4 col-lg-3 now-serving-col" data-office="registrar"
+                                        data-service="application_assessment_of_school_records">
+                                        <div class="card now-serving-card">
+                                            <div class="card-body text-center">
+                                                <div class="text-uppercase small text-muted fw-bold">Application
+                                                    &amp; Assessment of School Records</div>
+                                                <div class="now-serving-number"
+                                                    id="now-serving-application_assessment_of_school_records">—
+                                                </div>
+                                                <div class="small text-muted"
+                                                    id="now-serving-application_assessment_of_school_records-status">
+                                                    No one is being served</div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="col-12 col-md-4 col-lg-3 now-serving-col" data-office="registrar"
+                                        data-service="releasing_of_school_records">
+                                        <div class="card now-serving-card">
+                                            <div class="card-body text-center">
+                                                <div class="text-uppercase small text-muted fw-bold">Releasing of
+                                                    School Records</div>
+                                                <div class="now-serving-number"
+                                                    id="now-serving-releasing_of_school_records">—</div>
+                                                <div class="small text-muted"
+                                                    id="now-serving-releasing_of_school_records-status">No one is
+                                                    being served</div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="col-12 col-md-4 col-lg-3 now-serving-col" data-office="registrar"
+                                        data-service="inquiry_follow_up">
+                                        <div class="card now-serving-card">
+                                            <div class="card-body text-center">
+                                                <div class="text-uppercase small text-muted fw-bold">Inquiry &amp;
+                                                    Follow-Up</div>
+                                                <div class="now-serving-number" id="now-serving-inquiry_follow_up">—
+                                                </div>
+                                                <div class="small text-muted" id="now-serving-inquiry_follow_up-status">
+                                                    No one is being served
                                                 </div>
                                             </div>
                                         </div>
-                                        <div class="col-12 col-md-4 col-lg-3 now-serving-col" data-office="registrar"
-                                            data-service="application_assessment_of_school_records">
-                                            <div class="card now-serving-card">
-                                                <div class="card-body text-center">
-                                                    <div class="text-uppercase small text-muted fw-bold">Application
-                                                        &amp; Assessment of School Records</div>
-                                                    <div class="now-serving-number"
-                                                        id="now-serving-application_assessment_of_school_records">—
-                                                    </div>
-                                                    <div class="small text-muted"
-                                                        id="now-serving-application_assessment_of_school_records-status">
-                                                        No one is being served</div>
+                                    </div>
+                                    <div class="col-12 col-md-4 col-lg-3 now-serving-col" data-office="registrar"
+                                        data-service="faculty_tagging_room_assignments">
+                                        <div class="card now-serving-card">
+                                            <div class="card-body text-center">
+                                                <div class="text-uppercase small text-muted fw-bold">Faculty Tagging
+                                                    &amp; Room Assignments</div>
+                                                <div class="now-serving-number"
+                                                    id="now-serving-faculty_tagging_room_assignments">—</div>
+                                                <div class="small text-muted"
+                                                    id="now-serving-faculty_tagging_room_assignments-status">No one
+                                                    is being served</div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="col-12 col-md-4 col-lg-3 now-serving-col" data-office="accounting"
+                                        data-service="payment">
+                                        <div class="card now-serving-card">
+                                            <div class="card-body text-center">
+                                                <div class="text-uppercase small text-muted fw-bold">Payment</div>
+                                                <div class="now-serving-number" id="now-serving-payment">—</div>
+                                                <div class="small text-muted" id="now-serving-payment-status">No one
+                                                    is being served</div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="col-12 col-md-4 col-lg-3 now-serving-col" data-office="accounting"
+                                        data-service="balance_inquiry">
+                                        <div class="card now-serving-card">
+                                            <div class="card-body text-center">
+                                                <div class="text-uppercase small text-muted fw-bold">Balance Inquiry
+                                                </div>
+                                                <div class="now-serving-number" id="now-serving-balance_inquiry">—
+                                                </div>
+                                                <div class="small text-muted" id="now-serving-balance_inquiry-status">No
+                                                    one is being served
                                                 </div>
                                             </div>
                                         </div>
-                                        <div class="col-12 col-md-4 col-lg-3 now-serving-col" data-office="registrar"
-                                            data-service="releasing_of_school_records">
-                                            <div class="card now-serving-card">
-                                                <div class="card-body text-center">
-                                                    <div class="text-uppercase small text-muted fw-bold">Releasing of
-                                                        School Records</div>
-                                                    <div class="now-serving-number"
-                                                        id="now-serving-releasing_of_school_records">—</div>
-                                                    <div class="small text-muted"
-                                                        id="now-serving-releasing_of_school_records-status">No one is
-                                                        being served</div>
-                                                </div>
-                                            </div>
-                                        </div>
-                                        <div class="col-12 col-md-4 col-lg-3 now-serving-col" data-office="registrar"
-                                            data-service="inquiry_follow_up">
-                                            <div class="card now-serving-card">
-                                                <div class="card-body text-center">
-                                                    <div class="text-uppercase small text-muted fw-bold">Inquiry &amp;
-                                                        Follow-Up</div>
-                                                    <div class="now-serving-number" id="now-serving-inquiry_follow_up">—
-                                                    </div>
-                                                    <div class="small text-muted"
-                                                        id="now-serving-inquiry_follow_up-status">No one is being served
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </div>
-                                        <div class="col-12 col-md-4 col-lg-3 now-serving-col" data-office="registrar"
-                                            data-service="faculty_tagging_room_assignments">
-                                            <div class="card now-serving-card">
-                                                <div class="card-body text-center">
-                                                    <div class="text-uppercase small text-muted fw-bold">Faculty Tagging
-                                                        &amp; Room Assignments</div>
-                                                    <div class="now-serving-number"
-                                                        id="now-serving-faculty_tagging_room_assignments">—</div>
-                                                    <div class="small text-muted"
-                                                        id="now-serving-faculty_tagging_room_assignments-status">No one
-                                                        is being served</div>
-                                                </div>
-                                            </div>
-                                        </div>
-                                        <div class="col-12 col-md-4 col-lg-3 now-serving-col" data-office="accounting"
-                                            data-service="payment">
-                                            <div class="card now-serving-card">
-                                                <div class="card-body text-center">
-                                                    <div class="text-uppercase small text-muted fw-bold">Payment</div>
-                                                    <div class="now-serving-number" id="now-serving-payment">—</div>
-                                                    <div class="small text-muted" id="now-serving-payment-status">No one
-                                                        is being served</div>
-                                                </div>
-                                            </div>
-                                        </div>
-                                        <div class="col-12 col-md-4 col-lg-3 now-serving-col" data-office="accounting"
-                                            data-service="balance_inquiry">
-                                            <div class="card now-serving-card">
-                                                <div class="card-body text-center">
-                                                    <div class="text-uppercase small text-muted fw-bold">Balance Inquiry
-                                                    </div>
-                                                    <div class="now-serving-number" id="now-serving-balance_inquiry">—
-                                                    </div>
-                                                    <div class="small text-muted"
-                                                        id="now-serving-balance_inquiry-status">No one is being served
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </div>
-                                        <div class="col-12 col-md-4 col-lg-3 now-serving-col" data-office="accounting"
-                                            data-service="claims">
-                                            <div class="card now-serving-card">
-                                                <div class="card-body text-center">
-                                                    <div class="text-uppercase small text-muted fw-bold">Claims</div>
-                                                    <div class="now-serving-number" id="now-serving-claims">—</div>
-                                                    <div class="small text-muted" id="now-serving-claims-status">No one
-                                                        is being served</div>
-                                                </div>
+                                    </div>
+                                    <div class="col-12 col-md-4 col-lg-3 now-serving-col" data-office="accounting"
+                                        data-service="claims">
+                                        <div class="card now-serving-card">
+                                            <div class="card-body text-center">
+                                                <div class="text-uppercase small text-muted fw-bold">Claims</div>
+                                                <div class="now-serving-number" id="now-serving-claims">—</div>
+                                                <div class="small text-muted" id="now-serving-claims-status">No one
+                                                    is being served</div>
                                             </div>
                                         </div>
                                     </div>
@@ -871,51 +1119,84 @@
                             </div>
                         </div>
                     </div>
+                </div>
 
-                    <div class="tab-pane fade" id="verification-panel">
-                        <div class="card">
-                            <div class="card-body">
-                                <h5 class="card-title">Receipt Verification</h5>
-                                <form id="verification-form">
-                                    <div class="mb-3">
+                <div class="tab-pane fade" id="verification-panel">
+                    <div class="card">
+                        <div class="card-body">
+                            <h5 class="card-title">Receipt Verification</h5>
+                            <form id="verification-form">
+                                <div class="row g-3">
+                                    <div class="col-12">
                                         <label for="receipt-file" class="form-label">Receipt Image</label>
                                         <input type="file" class="form-control" id="receipt-file" accept="image/*"
                                             required>
                                     </div>
-                                    <div class="mb-3">
+                                    <div class="col-md-6">
                                         <label for="reference-number" class="form-label">Reference Number</label>
-                                        <input type="text" class="form-control" id="reference-number" required>
+                                        <input type="text" class="form-control" id="reference-number"
+                                            placeholder="e.g. 123456789" required>
                                     </div>
-                                    <div class="mb-3">
-                                        <label for="account-number" class="form-label">Account Number</label>
-                                        <input type="text" class="form-control" id="account-number" required>
+                                    <div class="col-md-6">
+                                        <label for="account-number" class="form-label">Student/Account Number</label>
+                                        <input type="text" class="form-control" id="account-number"
+                                            placeholder="e.g. 2023-1234" required>
                                     </div>
-                                    <button type="submit" class="btn btn-success">Verify Receipt</button>
-                                </form>
-                                <div id="verification-result" class="mt-3"></div>
-                            </div>
+                                    <div class="col-md-6">
+                                        <label for="payment-method" class="form-label">Payment Method</label>
+                                        <select class="form-select" id="payment-method" required>
+                                            <option value="" selected disabled>Select method...</option>
+                                            <option value="gcash">GCash</option>
+                                            <option value="paymaya">Maya</option>
+                                            <option value="landbank">LandBank</option>
+                                            <option value="bpi">BPI</option>
+                                            <option value="bdo">BDO</option>
+                                            <option value="over_the_counter">Over the Counter</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-md-3">
+                                        <label for="payment-amount" class="form-label">Amount Paid</label>
+                                        <div class="input-group">
+                                            <span class="input-group-text">₱</span>
+                                            <input type="number" step="0.01" class="form-control" id="payment-amount"
+                                                required>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-3">
+                                        <label for="payment-date" class="form-label">Date of Payment</label>
+                                        <input type="date" class="form-control" id="payment-date" required>
+                                    </div>
+                                    <div class="col-12">
+                                        <button type="submit" class="btn btn-success w-100 py-2 mt-2">
+                                            <i class="bi bi-shield-check me-2"></i>Verify Receipt
+                                        </button>
+                                    </div>
+                                </div>
+                            </form>
+                            <div id="verification-result" class="mt-3"></div>
                         </div>
                     </div>
+                </div>
 
-                    <div class="tab-pane fade" id="student-history-panel">
-                        <div id="student-history-list" class="table-responsive">
-                            <table class="table table-striped">
-                                <thead>
-                                    <tr>
-                                        <th>Queue #</th>
-                                        <th>Service</th>
-                                        <th>Status</th>
-                                        <th>Wait Time</th>
-                                        <th>Completed</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="student-history-tbody"></tbody>
-                            </table>
-                        </div>
+                <div class="tab-pane fade" id="student-history-panel">
+                    <div id="student-history-list" class="table-responsive">
+                        <table class="table table-striped">
+                            <thead>
+                                <tr>
+                                    <th>Queue #</th>
+                                    <th>Service</th>
+                                    <th>Status</th>
+                                    <th>Wait Time</th>
+                                    <th>Completed</th>
+                                </tr>
+                            </thead>
+                            <tbody id="student-history-tbody"></tbody>
+                        </table>
                     </div>
                 </div>
             </div>
         </div>
+    </div>
     </div>
 
     <!-- Register Modal -->
