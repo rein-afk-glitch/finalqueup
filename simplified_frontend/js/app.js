@@ -25,6 +25,7 @@ let queuePollInterval = null;
 let statsPollInterval = null;
 let nowServingPollInterval = null;
 let hasNotifiedFiveAway = false;
+let hasNotifiedTenAway = false;
 let lastNotifiedQueueId = null;
 let analyticsCharts = { numbersServed: null, avgServiceTime: null, peakHours: null };
 
@@ -137,6 +138,7 @@ function showDashboard(role) {
         }
 
         loadAdminDashboard();
+        loadServiceSettings();
     } else {
         // Put user name in the navbar title (replaces "Student Portal")
         const titleEl = document.getElementById('student-navbar-title');
@@ -333,8 +335,8 @@ function setupEventListeners() {
                     loadAdminStats();
                     loadQueueList();
                 }
-                if (target === '#queue-panel') {
-                    loadQueueList();
+                if (target === '#service-control-panel') {
+                    loadServiceSettings();
                 }
             }
         }
@@ -361,6 +363,27 @@ function setupEventListeners() {
             if (action === 'delete-user') {
                 deleteUser(userId);
             }
+        }
+
+        // Service status toggles
+        if (e.target.classList.contains('service-status-toggle')) {
+            const service = e.target.dataset.service;
+            const isOpen = e.target.checked;
+            updateServiceSetting(service, { is_open: isOpen });
+        }
+
+        // Save limit button
+        if (e.target.closest('.save-limit-btn')) {
+            const btn = e.target.closest('.save-limit-btn');
+            const service = btn.dataset.service;
+            const input = document.getElementById(`limit-${service}`);
+            const limit = input.value === '' ? null : parseInt(input.value, 10);
+            updateServiceSetting(service, { daily_limit: limit });
+        }
+
+        // Sync button
+        if (e.target.closest('.apply-settings-btn')) {
+            loadServiceSettings();
         }
     });
 }
@@ -931,6 +954,7 @@ function checkQueuePositionNotification(myQueue, servingData) {
     // Reset notification state when user leaves queue or gets called/serving
     if (myQueue.status !== 'waiting') {
         hasNotifiedFiveAway = false;
+        hasNotifiedTenAway = false;
         lastNotifiedQueueId = null;
         return;
     }
@@ -947,12 +971,56 @@ function checkQueuePositionNotification(myQueue, servingData) {
     const positionAway = myNumber - currentNumber;
     if (positionAway <= 0) return;
 
-    // User is 5 away - notify once per queue session
-    if (positionAway === 5 && myQueue.id !== lastNotifiedQueueId) {
-        hasNotifiedFiveAway = true;
-        lastNotifiedQueueId = myQueue.id;
-        triggerFiveAwayNotification(myQueue.queue_number, formatServiceLabel(service));
+    // User is 10 away
+    if (positionAway === 10 && !hasNotifiedTenAway) {
+        hasNotifiedTenAway = true;
+        triggerPositionNotification(myQueue.queue_number, formatServiceLabel(service), 10);
     }
+
+    // User is 5 away - notify once per queue session
+    if (positionAway === 5 && !hasNotifiedFiveAway) {
+        hasNotifiedFiveAway = true;
+        triggerPositionNotification(myQueue.queue_number, formatServiceLabel(service), 5);
+    }
+}
+
+// Show notification and vibrate when 5/10 away
+function triggerPositionNotification(queueNumber, serviceLabel, count) {
+    const title = 'Almost your turn!';
+    const body = `Queue ${queueNumber} (${serviceLabel}) — you're ${count} away. Get ready!`;
+
+    if ('Notification' in window && Notification.permission === 'granted') {
+        try {
+            new Notification(title, { body, icon: 'images/university-logo.png' });
+        } catch (_) {
+            new Notification(title, { body });
+        }
+    }
+
+    if (navigator.vibrate) {
+        navigator.vibrate([200, 100, 200, 100, 200]);
+    }
+
+    // In-app fallback: show prominent alert in queue status area
+    showPositionInAppAlert(queueNumber, serviceLabel, count);
+}
+
+// In-app alert when 5/10 away
+function showPositionInAppAlert(queueNumber, serviceLabel, count) {
+    const statusDiv = document.getElementById('my-queue-status');
+    if (!statusDiv) return;
+    const alert = document.createElement('div');
+    alert.className = `alert alert-${count === 10 ? 'info' : 'warning'} alert-dismissible fade show d-flex align-items-center mb-0 mt-2`;
+    alert.setAttribute('role', 'alert');
+    alert.innerHTML = `
+        <i class="bi bi-bell-fill me-2" style="font-size: 1.5rem;"></i>
+        <div class="flex-grow-1">
+            <strong>Almost your turn!</strong> Queue ${queueNumber} — you're ${count} away. Get ready!
+        </div>
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    `;
+    statusDiv.insertAdjacentElement('afterend', alert);
+    setTimeout(() => alert.remove(), 15000);
 }
 
 // Show notification and vibrate when 5 away
@@ -1472,3 +1540,111 @@ window.toggleListPassword = function (adminId) {
         icon.classList.replace('bi-eye-slash', 'bi-eye');
     }
 };
+
+// Service Control functions
+async function loadServiceSettings() {
+    const tbody = document.getElementById('service-settings-tbody');
+    if (!tbody) return;
+
+    try {
+        const response = await fetch(`${API_BASE}/admin/service-settings`, {
+            credentials: 'include'
+        });
+        if (!response.ok) throw new Error('Failed to load settings');
+
+        const settings = await response.json();
+        renderServiceSettings(settings);
+    } catch (error) {
+        console.error('Error loading service settings:', error);
+        tbody.innerHTML = `<tr><td colspan="4" class="text-center text-danger">Error loading settings: ${error.message}</td></tr>`;
+    }
+}
+
+function renderServiceSettings(settings) {
+    const tbody = document.getElementById('service-settings-tbody');
+    if (!tbody) return;
+
+    // Filter settings for appointed admins
+    let filteredSettings = settings;
+    if (currentUser?.admin_type === 'appointed' && currentUser?.admin_service) {
+        filteredSettings = settings.filter(s => s.service_type === currentUser.admin_service);
+    }
+
+    if (filteredSettings.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="4" class="text-center">No service settings available.</td></tr>';
+        return;
+    }
+
+    tbody.innerHTML = filteredSettings.map(setting => {
+        const isOpen = !!setting.is_open;
+        const limit = setting.daily_limit !== null ? setting.daily_limit : '';
+
+        return `
+            <tr>
+                <td>
+                    <div class="fw-bold">${formatServiceLabel(setting.service_type)}</div>
+                    <small class="text-muted">${setting.service_type}</small>
+                </td>
+                <td>
+                    <div class="form-check form-switch">
+                        <input class="form-check-input service-status-toggle" type="checkbox" 
+                            id="status-${setting.service_type}" 
+                            data-service="${setting.service_type}"
+                            ${isOpen ? 'checked' : ''}>
+                        <label class="form-check-label" for="status-${setting.service_type}">
+                            ${isOpen ? '<span class="badge bg-success">Open</span>' : '<span class="badge bg-danger">Closed</span>'}
+                        </label>
+                    </div>
+                </td>
+                <td>
+                    <div class="input-group input-group-sm" style="max-width: 150px;">
+                        <input type="number" class="form-control service-limit-input" 
+                            value="${limit}" 
+                            placeholder="No limit"
+                            data-service="${setting.service_type}"
+                            id="limit-${setting.service_type}">
+                        <button class="btn btn-outline-secondary save-limit-btn" 
+                            type="button" 
+                            data-service="${setting.service_type}">
+                            <i class="bi bi-save"></i>
+                        </button>
+                    </div>
+                </td>
+                <td class="text-end">
+                    <button class="btn btn-sm btn-primary apply-settings-btn" data-service="${setting.service_type}">
+                        Sync Now
+                    </button>
+                </td>
+            </tr>
+        `;
+    }).join('');
+}
+
+// Helper to format service type into readable labels
+function formatServiceLabel(serviceType) {
+    if (!serviceType) return '';
+    return serviceType
+        .split('_')
+        .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+        .join(' ');
+}
+
+async function updateServiceSetting(serviceType, updates) {
+    try {
+        const response = await fetch(`${API_BASE}/admin/service-settings/${serviceType}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify(updates)
+        });
+
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.error || 'Failed to update setting');
+        }
+
+        loadServiceSettings();
+    } catch (error) {
+        alert(error.message);
+    }
+}

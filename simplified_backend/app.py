@@ -229,6 +229,26 @@ def init_db():
             )
         """)
         
+        # Service settings table (Add this)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS service_settings (
+                service_type VARCHAR(50) PRIMARY KEY,
+                is_open BOOLEAN DEFAULT TRUE,
+                daily_limit INT DEFAULT NULL,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+            )
+        """)
+        
+        # Seed service settings if empty
+        cursor.execute("SELECT COUNT(*) as count FROM service_settings")
+        if cursor.fetchone()[0] == 0:
+            for svc in SERVICE_TYPES:
+                cursor.execute("INSERT INTO service_settings (service_type, is_open) VALUES (%s, %s)", (svc, True))
+        else:
+            # Ensure all SERVICE_TYPES exist in settings
+            for svc in SERVICE_TYPES:
+                cursor.execute("INSERT IGNORE INTO service_settings (service_type, is_open) VALUES (%s, %s)", (svc, True))
+
         conn.commit()
         return True
     except mysql.connector.Error as err:
@@ -460,6 +480,31 @@ def join_queue():
     cursor = conn.cursor(dictionary=True)
     
     try:
+        # Check service settings
+        cursor.execute("SELECT * FROM service_settings WHERE service_type = %s", (service_type,))
+        settings = cursor.fetchone()
+        
+        if settings:
+            if not settings['is_open']:
+                cursor.close()
+                conn.close()
+                svc_name = service_type.replace('_', ' ').title()
+                return jsonify({'error': f'The {svc_name} queue is currently closed.'}), 400
+            
+            if settings['daily_limit'] is not None:
+                today = datetime.now().date()
+                cursor.execute("""
+                    SELECT COUNT(*) as count FROM queue_entries 
+                    WHERE service_type = %s AND DATE(created_at) = %s
+                """, (service_type, today))
+                daily_count = cursor.fetchone()['count']
+                
+                if daily_count >= settings['daily_limit']:
+                    cursor.close()
+                    conn.close()
+                    svc_name = service_type.replace('_', ' ').title()
+                    return jsonify({'error': f'The daily limit for {svc_name} has been reached.'}), 400
+
         # Check if user is already in a queue
         cursor.execute("""
             SELECT * FROM queue_entries 
@@ -1277,6 +1322,72 @@ def delete_user(user_id):
         conn.rollback()
         cursor.close()
         conn.close()
+        return jsonify({'error': str(err)}), 500
+
+# Admin service settings routes
+@app.route('/api/admin/service-settings', methods=['GET'])
+@require_auth
+@require_admin
+def get_service_settings():
+    conn = get_db_connection()
+    if not conn:
+        return jsonify({'error': 'Database connection failed'}), 500
+    cursor = conn.cursor(dictionary=True)
+    try:
+        cursor.execute("SELECT * FROM service_settings")
+        settings = cursor.fetchall()
+        cursor.close()
+        conn.close()
+        return jsonify(settings), 200
+    except mysql.connector.Error as err:
+        cursor.close()
+        conn.close()
+        return jsonify({'error': str(err)}), 500
+
+@app.route('/api/admin/service-settings/<service_type>', methods=['PATCH'])
+@require_auth
+@require_admin
+def update_service_settings(service_type):
+    user = get_current_user()
+    if not user:
+        return jsonify({'error': 'User not found'}), 404
+        
+    # Appointed admins can only change their own service
+    if user.get('admin_type') == 'appointed':
+        if user.get('admin_service') != service_type:
+            return jsonify({'error': 'Not authorized for this service'}), 403
+            
+    data = request.json or {}
+    is_open = data.get('is_open')
+    daily_limit = data.get('daily_limit')
+    
+    conn = get_db_connection()
+    if not conn:
+        return jsonify({'error': 'Database connection failed'}), 500
+    cursor = conn.cursor(dictionary=True)
+    try:
+        updates = []
+        params = []
+        if is_open is not None:
+            updates.append("is_open = %s")
+            params.append(is_open)
+        if 'daily_limit' in data: # Allow setting to None/null
+            updates.append("daily_limit = %s")
+            params.append(daily_limit)
+            
+        if not updates:
+            return jsonify({'error': 'No updates provided'}), 400
+            
+        params.append(service_type)
+        cursor.execute(f"UPDATE service_settings SET {', '.join(updates)} WHERE service_type = %s", tuple(params))
+        conn.commit()
+        cursor.close()
+        conn.close()
+        return jsonify({'message': 'Settings updated successfully'}), 200
+    except mysql.connector.Error as err:
+        if conn:
+            conn.rollback()
+            conn.close()
         return jsonify({'error': str(err)}), 500
 
 # Health check
