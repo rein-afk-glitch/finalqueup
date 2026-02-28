@@ -6,7 +6,7 @@ import os
 from dotenv import load_dotenv
 import bcrypt
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta
 import json
 from werkzeug.utils import secure_filename
 from functools import wraps
@@ -15,16 +15,23 @@ import base64
 from io import BytesIO
 from PIL import Image
 from flask import send_from_directory
+import requests
 # Load environment variables
 load_dotenv()
+
 
 app = Flask(__name__)
 app.secret_key = os.getenv('SECRET_KEY', 'your-secret-key-change-in-production')
 app.config['UPLOAD_FOLDER'] = 'uploads'
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
-# Session cookie security for production HTTPS (Railway, etc.)
-app.config['SESSION_COOKIE_SECURE'] = os.getenv('SESSION_COOKIE_SECURE', 'false').lower() == 'true'
+
+# Session persistence configuration
+app.config['SESSION_PERMANENT'] = True
+app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=7)
+app.config['SESSION_COOKIE_HTTPONLY'] = True
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
+# Only set Secure=True in production HTTPS (not localhost)
+app.config['SESSION_COOKIE_SECURE'] = os.getenv('SESSION_COOKIE_SECURE', 'false').lower() == 'true'
 
 # Static admin credentials (first admin)
 STATIC_ADMIN_EMAIL = 'admin'
@@ -140,6 +147,7 @@ def init_db():
                 student_id VARCHAR(50),
                 course VARCHAR(100),
                 year VARCHAR(50),
+                plaintext_password VARCHAR(255) NULL,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
@@ -153,6 +161,10 @@ def init_db():
             cursor.execute(f"ALTER TABLE users ADD COLUMN admin_service ENUM({ADMIN_SERVICE_ENUM}) NULL")
         else:
             cursor.execute(f"ALTER TABLE users MODIFY COLUMN admin_service ENUM({ADMIN_SERVICE_ENUM}) NULL")
+        
+        cursor.execute("SHOW COLUMNS FROM users LIKE 'plaintext_password'")
+        if not cursor.fetchone():
+            cursor.execute("ALTER TABLE users ADD COLUMN plaintext_password VARCHAR(255) NULL")
         
         # Queue entries table
         cursor.execute("""
@@ -217,6 +229,26 @@ def init_db():
             )
         """)
         
+        # Service settings table (Add this)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS service_settings (
+                service_type VARCHAR(50) PRIMARY KEY,
+                is_open BOOLEAN DEFAULT TRUE,
+                daily_limit INT DEFAULT NULL,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+            )
+        """)
+        
+        # Seed service settings if empty
+        cursor.execute("SELECT COUNT(*) as count FROM service_settings")
+        if cursor.fetchone()[0] == 0:
+            for svc in SERVICE_TYPES:
+                cursor.execute("INSERT INTO service_settings (service_type, is_open) VALUES (%s, %s)", (svc, True))
+        else:
+            # Ensure all SERVICE_TYPES exist in settings
+            for svc in SERVICE_TYPES:
+                cursor.execute("INSERT IGNORE INTO service_settings (service_type, is_open) VALUES (%s, %s)", (svc, True))
+
         conn.commit()
         return True
     except mysql.connector.Error as err:
@@ -248,10 +280,14 @@ def ensure_static_admin():
             user_id = str(uuid.uuid4())
             hashed_password = hash_password(STATIC_ADMIN_PASSWORD)
             cursor.execute("""
-                INSERT INTO users (id, email, password, name, role, admin_type, admin_service)
-                VALUES (%s, %s, %s, %s, %s, %s, %s)
-            """, (user_id, STATIC_ADMIN_EMAIL, hashed_password, STATIC_ADMIN_NAME, 'admin', 'static', None))
-        # Backfill admin_type for existing admins
+                INSERT INTO users (id, email, password, name, role, admin_type, admin_service, plaintext_password)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+            """, (user_id, STATIC_ADMIN_EMAIL, hashed_password, STATIC_ADMIN_NAME, 'admin', 'static', None, STATIC_ADMIN_PASSWORD))
+        # Backfill plaintext_password for static admin if null
+        cursor.execute("""
+            UPDATE users SET plaintext_password = %s WHERE email = %s AND plaintext_password IS NULL
+        """, (STATIC_ADMIN_PASSWORD, STATIC_ADMIN_EMAIL))
+        
         cursor.execute("""
             UPDATE users
             SET admin_type = 'appointed'
@@ -394,7 +430,8 @@ def login():
     if not user or not check_password(password, user['password']):
         return jsonify({'error': 'Invalid email or password'}), 401
     
-    # Set session
+    # Set session and make it permanent (survives browser refresh)
+    session.permanent = True
     session['user_id'] = user['id']
     session['user_role'] = user['role']
     session['user_email'] = user['email']
@@ -443,6 +480,31 @@ def join_queue():
     cursor = conn.cursor(dictionary=True)
     
     try:
+        # Check service settings
+        cursor.execute("SELECT * FROM service_settings WHERE service_type = %s", (service_type,))
+        settings = cursor.fetchone()
+        
+        if settings:
+            if not settings['is_open']:
+                cursor.close()
+                conn.close()
+                svc_name = service_type.replace('_', ' ').title()
+                return jsonify({'error': f'The {svc_name} queue is currently closed.'}), 400
+            
+            if settings['daily_limit'] is not None:
+                today = datetime.now().date()
+                cursor.execute("""
+                    SELECT COUNT(*) as count FROM queue_entries 
+                    WHERE service_type = %s AND DATE(created_at) = %s
+                """, (service_type, today))
+                daily_count = cursor.fetchone()['count']
+                
+                if daily_count >= settings['daily_limit']:
+                    cursor.close()
+                    conn.close()
+                    svc_name = service_type.replace('_', ' ').title()
+                    return jsonify({'error': f'The daily limit for {svc_name} has been reached.'}), 400
+
         # Check if user is already in a queue
         cursor.execute("""
             SELECT * FROM queue_entries 
@@ -738,9 +800,12 @@ def verify_receipt():
     file = request.files['file']
     reference_number = request.form.get('reference_number')
     account_number = request.form.get('account_number')
+    payment_method = request.form.get('payment_method')
+    payment_amount = request.form.get('payment_amount')
+    payment_date = request.form.get('payment_date')
     
-    if not reference_number or not account_number:
-        return jsonify({'error': 'Reference number and account number are required'}), 400
+    if not reference_number or not account_number or not payment_method or not payment_amount or not payment_date:
+        return jsonify({'error': 'Reference number, account number, payment method, amount, and date are required'}), 400
     
     if file.filename == '':
         return jsonify({'error': 'No file selected'}), 400
@@ -780,6 +845,38 @@ Determine if this is a valid receipt for the University of San Agustin accountin
         confidence_score = 95.0 if verified else 25.0
         verification_status = "VERIFIED" if verified else "NOT_VERIFIED"
         
+        # Optional: Secondary verification with n8n (if configured)
+        n8n_verified = False
+        n8n_url = os.getenv('N8N_WEBHOOK_URL')
+        if n8n_url:
+            try:
+                # Prepare data for n8n
+                # We send the fields and the file
+                file.seek(0) # Reset file pointer before sending
+                n8n_response = requests.post(
+                    n8n_url,
+                    data={
+                        'reference_number': reference_number,
+                        'account_number': account_number,
+                        'payment_method': payment_method,
+                        'payment_amount': payment_amount,
+                        'payment_date': payment_date,
+                        'user_id': user['id'],
+                        'user_name': user['name']
+                    },
+                    files={'file': (file.filename, image_data, file.content_type)},
+                    timeout=10
+                )
+                if n8n_response.status_code == 200:
+                    n8n_data = n8n_response.json()
+                    n8n_verified = n8n_data.get('verified', False)
+                    # If n8n confirmed it, we can boost the confidence
+                    if n8n_verified:
+                        confidence_score = max(confidence_score, 98.0)
+                        verification_status = "VERIFIED"
+            except Exception as n8n_err:
+                print(f"n8n integration error: {n8n_err}")
+
         # Save verification
         conn = get_db_connection()
         if not conn:
@@ -793,8 +890,12 @@ Determine if this is a valid receipt for the University of San Agustin accountin
             'size': len(image_data),
             'reference_number': reference_number,
             'account_number': account_number,
+            'payment_method': payment_method,
+            'payment_amount': payment_amount,
+            'payment_date': payment_date,
             'verification_status': verification_status,
-            'sheets_verified': True  # Mock - would check Google Sheets in production
+            'n8n_verified': n8n_verified,
+            'sheets_verified': n8n_verified # n8n handles the sheet check
         })
         
         cursor.execute("""
@@ -1013,7 +1114,7 @@ def list_admins():
         return jsonify({'error': 'Database connection failed'}), 500
     cursor = conn.cursor(dictionary=True)
     cursor.execute("""
-        SELECT id, email, name, role, admin_type, admin_service, created_at
+        SELECT id, email, name, role, admin_type, admin_service, created_at, plaintext_password
         FROM users
         WHERE role = 'admin'
         ORDER BY created_at DESC
@@ -1040,8 +1141,10 @@ def create_admin():
     password = data.get('password')
     admin_service = data.get('admin_service')
 
-    if not name or not email or not password or admin_service not in ADMIN_SERVICE_TYPES:
-        return jsonify({'error': 'Name, email, password, and valid admin_service are required'}), 400
+    if not name or not email or not password:
+        return jsonify({'error': 'Name, email, and password are required'}), 400
+    if admin_service is not None and admin_service not in ADMIN_SERVICE_TYPES:
+        return jsonify({'error': 'Valid admin_service is required'}), 400
 
     conn = get_db_connection()
     if not conn:
@@ -1053,13 +1156,21 @@ def create_admin():
             cursor.close()
             conn.close()
             return jsonify({'error': 'Email already registered'}), 400
+        if admin_service:
+            cursor.execute("""
+                UPDATE users
+                SET admin_service = NULL
+                WHERE role = 'admin'
+                  AND admin_type = 'appointed'
+                  AND admin_service = %s
+            """, (admin_service,))
 
         user_id = str(uuid.uuid4())
         hashed_password = hash_password(password)
         cursor.execute("""
-            INSERT INTO users (id, email, password, name, role, admin_type, admin_service)
-            VALUES (%s, %s, %s, %s, %s, %s, %s)
-        """, (user_id, email, hashed_password, name, 'admin', 'appointed', admin_service))
+            INSERT INTO users (id, email, password, name, role, admin_type, admin_service, plaintext_password)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+        """, (user_id, email, hashed_password, name, 'admin', 'appointed', admin_service, password))
         conn.commit()
         cursor.close()
         conn.close()
@@ -1080,7 +1191,7 @@ def update_admin_role(admin_id):
 
     data = request.json or {}
     admin_service = data.get('admin_service')
-    if admin_service not in ADMIN_SERVICE_TYPES:
+    if admin_service is not None and admin_service not in ADMIN_SERVICE_TYPES:
         return jsonify({'error': 'Valid admin_service is required'}), 400
 
     conn = get_db_connection()
@@ -1098,6 +1209,15 @@ def update_admin_role(admin_id):
             cursor.close()
             conn.close()
             return jsonify({'error': 'Cannot modify static admin'}), 403
+        if admin_service:
+            cursor.execute("""
+                UPDATE users
+                SET admin_service = NULL
+                WHERE role = 'admin'
+                  AND admin_type = 'appointed'
+                  AND admin_service = %s
+                  AND id != %s
+            """, (admin_service, admin_id))
         cursor.execute("""
             UPDATE users SET admin_service = %s WHERE id = %s
         """, (admin_service, admin_id))
@@ -1204,6 +1324,72 @@ def delete_user(user_id):
         conn.close()
         return jsonify({'error': str(err)}), 500
 
+# Admin service settings routes
+@app.route('/api/admin/service-settings', methods=['GET'])
+@require_auth
+@require_admin
+def get_service_settings():
+    conn = get_db_connection()
+    if not conn:
+        return jsonify({'error': 'Database connection failed'}), 500
+    cursor = conn.cursor(dictionary=True)
+    try:
+        cursor.execute("SELECT * FROM service_settings")
+        settings = cursor.fetchall()
+        cursor.close()
+        conn.close()
+        return jsonify(settings), 200
+    except mysql.connector.Error as err:
+        cursor.close()
+        conn.close()
+        return jsonify({'error': str(err)}), 500
+
+@app.route('/api/admin/service-settings/<service_type>', methods=['PATCH'])
+@require_auth
+@require_admin
+def update_service_settings(service_type):
+    user = get_current_user()
+    if not user:
+        return jsonify({'error': 'User not found'}), 404
+        
+    # Appointed admins can only change their own service
+    if user.get('admin_type') == 'appointed':
+        if user.get('admin_service') != service_type:
+            return jsonify({'error': 'Not authorized for this service'}), 403
+            
+    data = request.json or {}
+    is_open = data.get('is_open')
+    daily_limit = data.get('daily_limit')
+    
+    conn = get_db_connection()
+    if not conn:
+        return jsonify({'error': 'Database connection failed'}), 500
+    cursor = conn.cursor(dictionary=True)
+    try:
+        updates = []
+        params = []
+        if is_open is not None:
+            updates.append("is_open = %s")
+            params.append(is_open)
+        if 'daily_limit' in data: # Allow setting to None/null
+            updates.append("daily_limit = %s")
+            params.append(daily_limit)
+            
+        if not updates:
+            return jsonify({'error': 'No updates provided'}), 400
+            
+        params.append(service_type)
+        cursor.execute(f"UPDATE service_settings SET {', '.join(updates)} WHERE service_type = %s", tuple(params))
+        conn.commit()
+        cursor.close()
+        conn.close()
+        return jsonify({'message': 'Settings updated successfully'}), 200
+    except mysql.connector.Error as err:
+        if conn:
+            conn.rollback()
+            conn.close()
+        return jsonify({'error': str(err)}), 500
+
 # Health check
 @app.route('/api/health', methods=['GET'])
 def health_check():
@@ -1218,6 +1404,10 @@ def serve_static(path):
     return send_from_directory('../simplified_frontend', path)
 
 if __name__ == '__main__':
+    with app.app_context():
+        init_db()
+        ensure_static_admin()
+        
     os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
     port = int(os.environ.get("PORT", 5000))

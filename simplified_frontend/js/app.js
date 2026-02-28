@@ -3,15 +3,15 @@
 const getApiBase = () => {
     const hostname = window.location.hostname;
     const protocol = window.location.protocol;
-    
+
     if (!hostname) {
         return `${protocol}//localhost:5001/api`;
     }
-    
+
     if (hostname === 'localhost' || hostname === '127.0.0.1') {
         return `${protocol}//localhost:5001/api`;
     }
-    
+
     return `${protocol}//${hostname}/api`;
 };
 
@@ -25,9 +25,8 @@ let queuePollInterval = null;
 let statsPollInterval = null;
 let nowServingPollInterval = null;
 let hasNotifiedFiveAway = false;
+let hasNotifiedTenAway = false;
 let lastNotifiedQueueId = null;
-let hasVibratedForCalled = false;
-let lastVibratedCalledQueueId = null;
 let analyticsCharts = { numbersServed: null, avgServiceTime: null, peakHours: null };
 
 const SERVICE_TYPES = [
@@ -68,8 +67,8 @@ function formatAdminServiceLabel(service) {
 }
 
 // Initialize app
-document.addEventListener('DOMContentLoaded', function() {
-    checkAuthStatus();
+document.addEventListener('DOMContentLoaded', function () {
+    initApp();
     setupEventListeners();
 });
 
@@ -79,7 +78,7 @@ async function checkAuthStatus() {
         const response = await fetch(`${API_BASE}/auth/me`, {
             credentials: 'include'
         });
-        
+
         if (response.ok) {
             const user = await response.json();
             currentUser = user;
@@ -95,31 +94,57 @@ async function checkAuthStatus() {
 
 // Show login page
 function showLogin() {
-    document.getElementById('login-page').classList.remove('d-none');
-    document.getElementById('admin-dashboard').classList.add('d-none');
-    document.getElementById('student-dashboard').classList.add('d-none');
-    stopPolling();
+    showPage('login-page');
 }
 
 // Show dashboard based on role
 function showDashboard(role) {
-    document.getElementById('login-page').classList.add('d-none');
-    
+    showPage(role === 'admin' ? 'admin-dashboard' : 'student-dashboard');
+
     if (role === 'admin') {
-        document.getElementById('admin-dashboard').classList.remove('d-none');
-        document.getElementById('student-dashboard').classList.add('d-none');
-        const roleLabel = isStaticAdmin()
-            ? 'Static Admin'
-            : `${formatAdminServiceLabel(currentUser.admin_service)} Admin`;
-        document.getElementById('admin-user-name').textContent = `${currentUser.name} (${roleLabel})`;
+        const adminName = currentUser.name || 'Admin';
+        const nameElements = ['admin-header-name', 'sidebar-user-name'];
+        nameElements.forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.textContent = adminName;
+        });
+
+        // Set the role label dynamically based on admin type and service
+        let roleLabel = 'System Administrator';
+        if (currentUser.admin_type === 'appointed' && currentUser.admin_service) {
+            // Convert snake_case service name to Title Case
+            const serviceName = currentUser.admin_service
+                .replace(/_/g, ' ')
+                .replace(/\b\w/g, c => c.toUpperCase());
+            roleLabel = serviceName + ' Admin';
+        }
+        const headerRoleEl = document.getElementById('admin-header-role');
+        if (headerRoleEl) headerRoleEl.textContent = roleLabel;
+        const sidebarRoleEl = document.getElementById('sidebar-user-role');
+        if (sidebarRoleEl) sidebarRoleEl.textContent = roleLabel;
+
+        // Mobile fallback if present
+        const oldNameEl = document.getElementById('admin-user-name');
+        if (oldNameEl) oldNameEl.textContent = adminName;
+
         configureAdminView();
+
+        // Restore tab from hash or default
+        const hash = window.location.hash;
+        if (hash && document.querySelector(`[href="${hash}"]`)) {
+            const targetTabLink = document.querySelector(`[href="${hash}"]`);
+            const tab = new bootstrap.Tab(targetTabLink);
+            tab.show();
+        }
+
         loadAdminDashboard();
+        loadServiceSettings();
     } else {
-        document.getElementById('student-dashboard').classList.remove('d-none');
-        document.getElementById('admin-dashboard').classList.add('d-none');
         // Put user name in the navbar title (replaces "Student Portal")
         const titleEl = document.getElementById('student-navbar-title');
-        if (titleEl) titleEl.textContent = currentUser.name || 'Student';
+        if (titleEl) {
+            titleEl.textContent = currentUser.name || 'Student';
+        }
 
         // Hide the old right-side name (kept for compatibility, but not used)
         const rightNameEl = document.getElementById('student-user-name');
@@ -133,7 +158,7 @@ function showDashboard(role) {
 function setupEventListeners() {
     // Login form
     document.getElementById('login-form').addEventListener('submit', handleLogin);
-    
+
     // Register form
     document.getElementById('register-form').addEventListener('submit', handleRegister);
 
@@ -143,43 +168,53 @@ function setupEventListeners() {
         createAdminForm.addEventListener('submit', handleCreateAdmin);
     }
 
-    // Analytics tab and period
-    const analyticsTabEl = document.getElementById('analytics-tab');
-    const analyticsPanelEl = document.getElementById('analytics-panel');
-    if (analyticsTabEl && analyticsPanelEl) {
-        document.getElementById('admin-tabs')?.addEventListener('shown.bs.tab', (e) => {
-            if (e.target.id === 'analytics-tab') loadAdminAnalytics();
-        });
-        const periodSelect = document.getElementById('analytics-period');
-        if (periodSelect) {
-            periodSelect.addEventListener('change', loadAdminAnalytics);
+    // Creation Form Password Toggle
+    window.toggleAdminCreatePassword = function () {
+        const passwordInput = document.getElementById('new-admin-password');
+        const toggleBtn = document.getElementById('toggle-admin-password');
+        const icon = toggleBtn.querySelector('i');
+
+        if (passwordInput.type === 'password') {
+            passwordInput.type = 'text';
+            icon.classList.replace('bi-eye', 'bi-eye-slash');
+        } else {
+            passwordInput.type = 'password';
+            icon.classList.replace('bi-eye-slash', 'bi-eye');
         }
-    }
-    
+    };
+
+    // Analytics sub-tab triggers
+    ['analytics-served-panel', 'analytics-time-panel', 'analytics-peak-panel'].forEach(panelId => {
+        const tabLink = document.querySelector(`[href="#${panelId}"]`);
+        if (tabLink) {
+            tabLink.addEventListener('shown.bs.tab', () => loadAdminAnalytics());
+        }
+    });
+
     // Join queue form
     document.getElementById('join-queue-form').addEventListener('submit', handleJoinQueue);
-    
+
     // Verification form
     document.getElementById('verification-form').addEventListener('submit', handleVerification);
-    
+
     // Service selection buttons (mobile-friendly) + student office filters
-    document.addEventListener('click', function(e) {
+    document.addEventListener('click', function (e) {
         // Service button clicks
         if (e.target.closest('.service-btn')) {
             const serviceBtn = e.target.closest('.service-btn');
             const service = serviceBtn.dataset.service;
-            
+
             // Remove active class from all service buttons
             document.querySelectorAll('.service-btn').forEach(btn => {
                 btn.classList.remove('active');
             });
-            
+
             // Add active class to clicked button
             serviceBtn.classList.add('active');
-            
+
             // Set the hidden input value
             document.getElementById('service-type').value = service;
-            
+
             // Check if both service and priority are selected, then submit
             const priority = document.getElementById('priority').value;
             if (service && priority) {
@@ -189,23 +224,23 @@ function setupEventListeners() {
                 }, 200);
             }
         }
-        
+
         // Priority button clicks
         if (e.target.closest('.priority-btn')) {
             const priorityBtn = e.target.closest('.priority-btn');
             const priority = priorityBtn.dataset.priority;
-            
+
             // Remove active class from all priority buttons
             document.querySelectorAll('.priority-btn').forEach(btn => {
                 btn.classList.remove('active');
             });
-            
+
             // Add active class to clicked button
             priorityBtn.classList.add('active');
-            
+
             // Set the hidden input value
             document.getElementById('priority').value = priority;
-            
+
             // Check if both service and priority are selected, then submit
             const service = document.getElementById('service-type').value;
             if (service && priority) {
@@ -215,7 +250,7 @@ function setupEventListeners() {
                 }, 200);
             }
         }
-        
+
         // Student service office filters (Join Queue section)
         const officeFilterBtn = e.target.closest('.service-filter-btn');
         if (officeFilterBtn) {
@@ -242,22 +277,68 @@ function setupEventListeners() {
             });
         }
 
-        // Filter button clicks (admin dashboard)
-        if (e.target.closest('.filter-btn')) {
-            const filterBtn = e.target.closest('.filter-btn');
-            if (filterBtn.disabled) return;
-            const filterValue = filterBtn.dataset.filter;
-            
-            // Remove active class from all filter buttons
-            document.querySelectorAll('.filter-btn').forEach(btn => {
-                btn.classList.remove('active');
+        // Admin service office filters
+        const adminOfficeBtn = e.target.closest('.filter-btn[id^="filter-"][id$="-group"]');
+        if (adminOfficeBtn) {
+            const office = adminOfficeBtn.dataset.filter;
+            const serviceButtons = document.querySelectorAll('#admin-service-filters .filter-btn');
+
+            serviceButtons.forEach(btn => {
+                const service = btn.dataset.filter;
+                if (!service) { // "All" button
+                    btn.style.display = 'block';
+                    return;
+                }
+
+                const isRegistrar = ['submission_of_application_forms', 'application_assessment_of_school_records', 'releasing_of_school_records', 'inquiry_follow_up', 'faculty_tagging_room_assignments'].includes(service);
+                const isAccounting = ['payment', 'balance_inquiry', 'claims'].includes(service);
+
+                if (office === 'registrar') {
+                    btn.style.display = isRegistrar ? 'block' : 'none';
+                } else if (office === 'accounting') {
+                    btn.style.display = isAccounting ? 'block' : 'none';
+                } else {
+                    btn.style.display = 'block';
+                }
             });
-            
-            // Add active class to clicked button
-            filterBtn.classList.add('active');
-            
-            // Load queue list with filter
-            loadQueueListWithFilter(filterValue);
+        }
+
+        // Sync Sidebar when clicking tabs/pills outside sidebar (like Quick Actions)
+        if (e.target.closest('[data-bs-toggle="pill"]') || e.target.closest('[data-bs-toggle="tab"]')) {
+            const toggle = e.target.closest('[data-bs-toggle="pill"]') || e.target.closest('[data-bs-toggle="tab"]');
+            const target = toggle.getAttribute('href') || toggle.dataset.bsTarget;
+
+            // Find the corresponding link in the sidebar
+            const sidebarBtn = document.querySelector(`.sidebar-nav-links [href="${target}"]`);
+            if (sidebarBtn) {
+                // Use Bootstrap's API to ensure correct tab switching and avoid stacking
+                const tab = bootstrap.Tab.getOrCreateInstance(sidebarBtn);
+                tab.show();
+
+                // If it's in a submenu, ensure it's expanded
+                const parentSubmenu = sidebarBtn.closest('.submenu');
+                if (parentSubmenu) {
+                    const collapseObj = bootstrap.Collapse.getOrCreateInstance(parentSubmenu);
+                    collapseObj.show();
+                    const parentToggle = document.querySelector(`[data-bs-toggle="collapse"][href="#${parentSubmenu.id}"]`);
+                    if (parentToggle) parentToggle.classList.remove('collapsed');
+                }
+
+                // Trigger data reload for the specific panel
+                if (target === '#admin-list-panel') loadAdminList();
+                if (target === '#user-list-panel') loadUserList();
+                if (target === '#analytics-served-panel' || target === '#analytics-time-panel' || target === '#analytics-peak-panel' || target === '#my-analytics-panel') {
+                    loadAdminAnalytics();
+                    if (typeof loadMyAnalytics === 'function') loadMyAnalytics();
+                }
+                if (target === '#overview-panel') {
+                    loadAdminStats();
+                    loadQueueList();
+                }
+                if (target === '#service-control-panel') {
+                    loadServiceSettings();
+                }
+            }
         }
 
         // Admin management actions
@@ -283,7 +364,84 @@ function setupEventListeners() {
                 deleteUser(userId);
             }
         }
+
+        // Service status toggles
+        if (e.target.classList.contains('service-status-toggle')) {
+            const service = e.target.dataset.service;
+            const isOpen = e.target.checked;
+            updateServiceSetting(service, { is_open: isOpen });
+        }
+
+        // Save limit button
+        if (e.target.closest('.save-limit-btn')) {
+            const btn = e.target.closest('.save-limit-btn');
+            const service = btn.dataset.service;
+            const input = document.getElementById(`limit-${service}`);
+            const limit = input.value === '' ? null : parseInt(input.value, 10);
+            updateServiceSetting(service, { daily_limit: limit });
+        }
+
+        // Sync button
+        if (e.target.closest('.apply-settings-btn')) {
+            loadServiceSettings();
+        }
     });
+}
+
+// Navigation
+function showPage(pageId) {
+    const pages = ['landing-page', 'login-page', 'admin-dashboard', 'student-dashboard'];
+    pages.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) {
+            if (id === pageId) {
+                el.classList.remove('d-none');
+                // Use !important on all show calls so they can always be overridden consistently
+                if (id === 'admin-dashboard') {
+                    el.style.setProperty('display', 'flex', 'important');
+                } else if (id === 'login-page') {
+                    el.style.setProperty('display', 'flex', 'important');
+                } else {
+                    el.style.setProperty('display', 'block', 'important');
+                }
+            } else {
+                el.classList.add('d-none');
+                // MUST use setProperty with 'important' to override any previously set !important flex
+                el.style.setProperty('display', 'none', 'important');
+            }
+        }
+    });
+
+    // Stop any active polling intervals when navigating away
+    if (pageId !== 'admin-dashboard' && pageId !== 'student-dashboard') {
+        if (statsPollInterval) { clearInterval(statsPollInterval); statsPollInterval = null; }
+        if (queuePollInterval) { clearInterval(queuePollInterval); queuePollInterval = null; }
+    }
+}
+
+document.getElementById('nav-start-btn')?.addEventListener('click', () => showPage('login-page'));
+document.getElementById('start-btn')?.addEventListener('click', () => showPage('login-page'));
+document.getElementById('nav-signin-btn')?.addEventListener('click', () => showPage('login-page'));
+document.getElementById('login-back-btn')?.addEventListener('click', () => showPage('landing-page'));
+
+// Initial page check
+async function initApp() {
+    try {
+        const response = await fetch(`${API_BASE}/auth/me`, {
+            credentials: 'include'
+        });
+
+        if (response.ok) {
+            const user = await response.json();
+            currentUser = user;
+            showDashboard(user.role);
+        } else {
+            showPage('landing-page');
+        }
+    } catch (error) {
+        console.error('Auth check failed:', error);
+        showPage('landing-page');
+    }
 }
 
 // Handle login
@@ -292,7 +450,7 @@ async function handleLogin(e) {
     const email = document.getElementById('login-email').value;
     const password = document.getElementById('login-password').value;
     const errorDiv = document.getElementById('login-error');
-    
+
     try {
         const response = await fetch(`${API_BASE}/auth/login`, {
             method: 'POST',
@@ -302,9 +460,9 @@ async function handleLogin(e) {
             credentials: 'include',
             body: JSON.stringify({ email, password })
         });
-        
+
         const data = await response.json();
-        
+
         if (response.ok) {
             currentUser = data;
             showDashboard(data.role);
@@ -328,9 +486,9 @@ async function handleRegister(e) {
         password: document.getElementById('register-password').value,
         student_id: document.getElementById('register-student-id').value || null
     };
-    
+
     const errorDiv = document.getElementById('register-error');
-    
+
     try {
         const response = await fetch(`${API_BASE}/auth/register`, {
             method: 'POST',
@@ -340,9 +498,9 @@ async function handleRegister(e) {
             credentials: 'include',
             body: JSON.stringify(formData)
         });
-        
+
         const data = await response.json();
-        
+
         if (response.ok) {
             // Close modal and show success
             const modal = bootstrap.Modal.getInstance(document.getElementById('registerModal'));
@@ -369,71 +527,85 @@ async function logout() {
     } catch (error) {
         console.error('Logout error:', error);
     }
-    
+
     currentUser = null;
     showLogin();
 }
 
 // Load admin dashboard
 function loadAdminDashboard() {
-    if (isStaticAdmin()) {
-        loadHistory();
-        return;
-    }
-
     loadAdminStats();
     loadQueueList();
     loadHistory();
 
     // Start polling
-    statsPollInterval = setInterval(loadAdminStats, 5000);
-    queuePollInterval = setInterval(loadQueueList, 3000);
+    if (!statsPollInterval) statsPollInterval = setInterval(loadAdminStats, 5000);
+    if (!queuePollInterval) queuePollInterval = setInterval(loadQueueList, 3000);
 }
 
 function configureAdminView() {
-    const adminManagementTab = document.getElementById('admin-management-tab');
-    const adminManagementSection = document.getElementById('admin-management-section');
-    const adminStatsRow = document.getElementById('admin-stats-row');
-    const queueTab = document.getElementById('queue-tab');
-    const queuePanel = document.getElementById('queue-panel');
-    const analyticsTab = document.getElementById('analytics-tab');
-    const analyticsPanel = document.getElementById('analytics-panel');
+    const adminCreateTab = document.querySelector('[href="#admin-create-panel"]');
+    const adminListTab = document.querySelector('[href="#admin-list-panel"]');
+    const userListTab = document.querySelector('[href="#user-list-panel"]');
+    const usersSubmenuToggle = document.querySelector('[href="#users-submenu"]');
+
+    // Analytics sub-menus
+    const analyticsSubmenuToggle = document.querySelector('[href="#analytics-submenu"]');
+    const analyticsNavItem = analyticsSubmenuToggle ? analyticsSubmenuToggle.closest('.nav-item-with-submenu') : null;
+    const myAnalyticsTab = document.querySelector('[href="#my-analytics-panel"]');
+
+    const overviewTab = document.querySelector('[href="#overview-panel"]');
+
     if (isStaticAdmin()) {
-        if (adminManagementTab) adminManagementTab.classList.remove('d-none');
-        if (adminManagementSection) adminManagementSection.classList.remove('d-none');
-        if (analyticsTab) analyticsTab.classList.remove('d-none');
-        if (analyticsPanel) analyticsPanel.classList.remove('d-none');
-        if (adminStatsRow) adminStatsRow.classList.add('d-none');
-        if (queueTab) queueTab.classList.add('d-none');
-        if (queuePanel) queuePanel.classList.add('d-none');
-        if (queueTab) queueTab.classList.remove('active');
-        if (queuePanel) queuePanel.classList.remove('show', 'active');
-        const historyTab = document.getElementById('history-tab');
-        const historyPanel = document.getElementById('history-panel');
-        if (historyTab) historyTab.classList.remove('active');
-        if (historyPanel) historyPanel.classList.remove('show', 'active');
-        if (adminManagementTab) adminManagementTab.classList.add('active');
-        const adminManagementPanel = document.getElementById('admin-management-panel');
-        if (adminManagementPanel) adminManagementPanel.classList.add('show', 'active');
+        // System admin: show full management + system-wide analytics
+        if (adminCreateTab) adminCreateTab.classList.remove('d-none');
+        if (adminListTab) adminListTab.classList.remove('d-none');
+        if (userListTab) userListTab.classList.remove('d-none');
+        if (usersSubmenuToggle) usersSubmenuToggle.parentElement.classList.remove('d-none');
+        if (analyticsNavItem) analyticsNavItem.classList.remove('d-none');
+        // Hide personal analytics for system admin
+        if (myAnalyticsTab) myAnalyticsTab.classList.add('d-none');
+
+        // Default to admin list for static admins
+        if (adminListTab) {
+            const tab = new bootstrap.Tab(adminListTab);
+            tab.show();
+            const submenu = document.getElementById('users-submenu');
+            if (submenu) {
+                const collapse = bootstrap.Collapse.getOrCreateInstance(submenu);
+                collapse.show();
+                const toggle = document.querySelector('[href="#users-submenu"]');
+                if (toggle) toggle.classList.remove('collapsed');
+            }
+        }
         loadAdminManagement();
     } else {
-        if (adminManagementTab) adminManagementTab.classList.add('d-none');
-        if (adminManagementSection) adminManagementSection.classList.add('d-none');
-        if (analyticsTab) analyticsTab.classList.add('d-none');
-        if (analyticsPanel) analyticsPanel.classList.add('d-none');
-        if (adminStatsRow) adminStatsRow.classList.remove('d-none');
-        if (queueTab) queueTab.classList.remove('d-none');
-        if (queuePanel) queuePanel.classList.remove('d-none');
-        if (adminManagementTab) adminManagementTab.classList.remove('active');
-        const adminManagementPanel = document.getElementById('admin-management-panel');
-        if (adminManagementPanel) adminManagementPanel.classList.remove('show', 'active');
-        if (queueTab) queueTab.classList.add('active');
-        if (queuePanel) queuePanel.classList.add('show', 'active');
+        // Appointed admin: hide management + system analytics, show personal analytics
+        [adminCreateTab, adminListTab, userListTab, usersSubmenuToggle].forEach(el => {
+            if (el) {
+                const navItem = el.closest('.nav-item-with-submenu') || el.parentElement;
+                navItem.classList.add('d-none');
+            }
+        });
+        if (analyticsNavItem) analyticsNavItem.classList.add('d-none');
+        if (myAnalyticsTab) myAnalyticsTab.classList.remove('d-none');
+
+        // Show the My Analytics subtitle with the service name
+        const subtitleEl = document.getElementById('my-analytics-subtitle');
+        if (subtitleEl && currentUser.admin_service) {
+            const svcName = currentUser.admin_service.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+            subtitleEl.textContent = `Your personal performance stats for the ${svcName} queue.`;
+        }
+
+        // Default to overview for appointed admins
+        if (overviewTab) {
+            const tab = new bootstrap.Tab(overviewTab);
+            tab.show();
+        }
     }
 
     const assignedService = currentUser?.admin_service;
     const filterButtons = Array.from(document.querySelectorAll('.filter-btn'));
-    const statsCards = Array.from(document.querySelectorAll('[data-service]'));
     if (!isStaticAdmin() && assignedService) {
         filterButtons.forEach(btn => {
             const filterValue = btn.dataset.filter || '';
@@ -442,17 +614,10 @@ function configureAdminView() {
             btn.disabled = !isAssigned;
             btn.classList.toggle('d-none', !isAssigned);
         });
-
-        statsCards.forEach(card => {
-            card.classList.toggle('d-none', card.dataset.service !== assignedService);
-        });
     } else {
         filterButtons.forEach(btn => {
             btn.disabled = false;
             btn.classList.remove('d-none');
-        });
-        statsCards.forEach(card => {
-            card.classList.remove('d-none');
         });
     }
 }
@@ -463,7 +628,7 @@ async function loadAdminStats() {
         const response = await fetch(`${API_BASE}/admin/stats`, {
             credentials: 'include'
         });
-        
+
         if (response.ok) {
             const stats = await response.json();
             document.getElementById('stats-waiting').textContent = stats.total_waiting || 0;
@@ -486,7 +651,7 @@ async function loadQueueList() {
     if (currentUser?.role === 'admin' && !isStaticAdmin() && currentUser?.admin_service) {
         serviceType = currentUser.admin_service;
     }
-    
+
     await loadQueueListWithFilter(serviceType);
 }
 
@@ -496,14 +661,14 @@ async function loadQueueListWithFilter(serviceType = '') {
         serviceType = currentUser.admin_service;
     }
     try {
-        const url = serviceType 
+        const url = serviceType
             ? `${API_BASE}/queue/status?service_type=${serviceType}`
             : `${API_BASE}/queue/status`;
-        
+
         const response = await fetch(url, {
             credentials: 'include'
         });
-        
+
         if (response.ok) {
             const entries = await response.json();
             displayQueueList(entries);
@@ -516,30 +681,30 @@ async function loadQueueListWithFilter(serviceType = '') {
 // Display queue list
 function displayQueueList(entries) {
     const container = document.getElementById('queue-list');
-    
+
     if (entries.length === 0) {
         container.innerHTML = '<div class="col-12"><div class="alert alert-info">No entries in queue</div></div>';
         return;
     }
-    
+
     container.innerHTML = entries.map(entry => {
         const statusBadge = {
             'waiting': '<span class="badge bg-warning">Waiting</span>',
             'called': '<span class="badge bg-info">Called</span>',
             'serving': '<span class="badge bg-success">Serving</span>'
         }[entry.status] || '<span class="badge bg-secondary">' + entry.status + '</span>';
-        
-        const priorityBadge = entry.priority === 'senior_pwd' 
-            ? '<span class="badge bg-danger">Senior/PWD</span>' 
+
+        const priorityBadge = entry.priority === 'senior_pwd'
+            ? '<span class="badge bg-danger">Senior/PWD</span>'
             : '';
-        
-        const actions = entry.status === 'waiting' 
+
+        const actions = entry.status === 'waiting'
             ? `<button class="btn btn-sm btn-primary" onclick="queueAction('${entry.id}', 'call')">Call</button>`
             : entry.status === 'called'
-            ? `<button class="btn btn-sm btn-success" onclick="queueAction('${entry.id}', 'next')">Next</button>`
-            : `<button class="btn btn-sm btn-success" onclick="queueAction('${entry.id}', 'complete')">Complete</button>
+                ? `<button class="btn btn-sm btn-success" onclick="queueAction('${entry.id}', 'next')">Next</button>`
+                : `<button class="btn btn-sm btn-success" onclick="queueAction('${entry.id}', 'complete')">Complete</button>
                <button class="btn btn-sm btn-danger" onclick="queueAction('${entry.id}', 'no_show')">No Show</button>`;
-        
+
         return `
             <div class="col-md-4 mb-3">
                 <div class="card">
@@ -569,7 +734,7 @@ async function queueAction(queueId, action) {
             credentials: 'include',
             body: JSON.stringify({ queue_id: queueId, action: action })
         });
-        
+
         if (response.ok) {
             loadQueueList();
             loadAdminStats();
@@ -589,7 +754,7 @@ async function loadHistory() {
         const response = await fetch(`${API_BASE}/transactions/history`, {
             credentials: 'include'
         });
-        
+
         if (response.ok) {
             const history = await response.json();
             displayHistory(history);
@@ -602,7 +767,12 @@ async function loadHistory() {
 // Load and display admin analytics (SuperAdmin only)
 async function loadAdminAnalytics() {
     if (!isStaticAdmin()) return;
-    const periodEl = document.getElementById('analytics-period');
+    // Read from whichever period selector is visible (each sub-panel has its own)
+    const periodEl =
+        document.getElementById('analytics-period-served') ||
+        document.getElementById('analytics-period-time') ||
+        document.getElementById('analytics-period-peak') ||
+        document.getElementById('analytics-period');
     const days = periodEl ? parseInt(periodEl.value, 10) : 30;
     try {
         const response = await fetch(`${API_BASE}/admin/analytics?days=${days}`, { credentials: 'include' });
@@ -715,12 +885,12 @@ function renderAnalyticsCharts(data) {
 // Display history
 function displayHistory(history) {
     const tbody = document.getElementById('history-tbody');
-    
+
     if (history.length === 0) {
         tbody.innerHTML = '<tr><td colspan="6" class="text-center">No transaction history</td></tr>';
         return;
     }
-    
+
     tbody.innerHTML = history.map(trans => {
         return `
             <tr>
@@ -733,15 +903,6 @@ function displayHistory(history) {
             </tr>
         `;
     }).join('');
-}
-
-// Switch student view to the Join Queue panel (Now Serving + My Queue)
-function switchToStudentJoinQueuePanel() {
-    const tabEl = document.getElementById('join-queue-tab');
-    if (tabEl && typeof bootstrap !== 'undefined' && bootstrap.Tab) {
-        const tab = bootstrap.Tab.getOrCreateInstance(tabEl);
-        tab.show();
-    }
 }
 
 // Load student dashboard
@@ -781,9 +942,8 @@ function requestNotificationPermission() {
 
 // Parse numeric part from queue number (e.g. "AF10" -> 10, "PY01" -> 1)
 function parseQueueNumber(queueNumber) {
-    if (queueNumber == null) return null;
-    const s = typeof queueNumber === 'string' ? queueNumber : String(queueNumber);
-    const match = s.match(/(\d+)$/);
+    if (!queueNumber || typeof queueNumber !== 'string') return null;
+    const match = queueNumber.match(/(\d+)$/);
     return match ? parseInt(match[1], 10) : null;
 }
 
@@ -794,9 +954,8 @@ function checkQueuePositionNotification(myQueue, servingData) {
     // Reset notification state when user leaves queue or gets called/serving
     if (myQueue.status !== 'waiting') {
         hasNotifiedFiveAway = false;
+        hasNotifiedTenAway = false;
         lastNotifiedQueueId = null;
-        hasVibratedForCalled = false;
-        lastVibratedCalledQueueId = null;
         return;
     }
 
@@ -805,38 +964,30 @@ function checkQueuePositionNotification(myQueue, servingData) {
     if (!serviceInfo || !serviceInfo.serving || serviceInfo.serving.length === 0) return;
 
     const currentServing = serviceInfo.serving[0];
-    const currentQueueNumberRaw = currentServing?.queue_number;
-    const currentNumber = parseQueueNumber(currentQueueNumberRaw);
+    const currentNumber = parseQueueNumber(currentServing?.queue_number);
     const myNumber = parseQueueNumber(myQueue.queue_number);
-    const myQueueNumberRaw = (myQueue.queue_number || '').toString().trim();
+    if (currentNumber == null || myNumber == null) return;
 
-    // User's number is called / being served — vibrate once (compare by string and by numeric part)
-    const isMyNumberCalled = myQueueNumberRaw && (
-        myQueueNumberRaw === (currentQueueNumberRaw || '').toString().trim() ||
-        (currentNumber != null && myNumber != null && myNumber <= currentNumber)
-    );
-    if (isMyNumberCalled && myQueue.id !== lastVibratedCalledQueueId) {
-        hasVibratedForCalled = true;
-        lastVibratedCalledQueueId = myQueue.id;
-        triggerCalledNotification(myQueue.queue_number, formatServiceLabel(service));
-        return;
+    const positionAway = myNumber - currentNumber;
+    if (positionAway <= 0) return;
+
+    // User is 10 away
+    if (positionAway === 10 && !hasNotifiedTenAway) {
+        hasNotifiedTenAway = true;
+        triggerPositionNotification(myQueue.queue_number, formatServiceLabel(service), 10);
     }
-    if (currentNumber != null && myNumber != null && myNumber <= currentNumber) return;
-
-    const positionAway = currentNumber != null && myNumber != null ? myNumber - currentNumber : 1;
 
     // User is 5 away - notify once per queue session
-    if (positionAway === 5 && myQueue.id !== lastNotifiedQueueId) {
+    if (positionAway === 5 && !hasNotifiedFiveAway) {
         hasNotifiedFiveAway = true;
-        lastNotifiedQueueId = myQueue.id;
-        triggerFiveAwayNotification(myQueue.queue_number, formatServiceLabel(service));
+        triggerPositionNotification(myQueue.queue_number, formatServiceLabel(service), 5);
     }
 }
 
-// Vibrate and notify when user's number is called
-function triggerCalledNotification(queueNumber, serviceLabel) {
-    const title = "You're up!";
-    const body = `Queue ${queueNumber} (${serviceLabel}) — your number was called. Please proceed.`;
+// Show notification and vibrate when 5/10 away
+function triggerPositionNotification(queueNumber, serviceLabel, count) {
+    const title = 'Almost your turn!';
+    const body = `Queue ${queueNumber} (${serviceLabel}) — you're ${count} away. Get ready!`;
 
     if ('Notification' in window && Notification.permission === 'granted') {
         try {
@@ -846,33 +997,30 @@ function triggerCalledNotification(queueNumber, serviceLabel) {
         }
     }
 
-    // Vibration (works on Android; often ignored on iOS/desktop without user gesture)
-    try {
-        if (typeof navigator !== 'undefined' && navigator.vibrate) {
-            navigator.vibrate([400, 150, 400, 150, 400]);
-        }
-    } catch (_) {}
+    if (navigator.vibrate) {
+        navigator.vibrate([200, 100, 200, 100, 200]);
+    }
 
-    // In-app alert so user always sees feedback (e.g. when vibration is blocked or unsupported)
-    showCalledInAppAlert(queueNumber, serviceLabel);
+    // In-app fallback: show prominent alert in queue status area
+    showPositionInAppAlert(queueNumber, serviceLabel, count);
 }
 
-// In-app "You're up!" alert when number is called (always shown)
-function showCalledInAppAlert(queueNumber, serviceLabel) {
+// In-app alert when 5/10 away
+function showPositionInAppAlert(queueNumber, serviceLabel, count) {
     const statusDiv = document.getElementById('my-queue-status');
     if (!statusDiv) return;
     const alert = document.createElement('div');
-    alert.className = 'alert alert-success alert-dismissible fade show d-flex align-items-center';
+    alert.className = `alert alert-${count === 10 ? 'info' : 'warning'} alert-dismissible fade show d-flex align-items-center mb-0 mt-2`;
     alert.setAttribute('role', 'alert');
     alert.innerHTML = `
-        <i class="bi bi-telephone-fill me-2" style="font-size: 1.5rem;"></i>
+        <i class="bi bi-bell-fill me-2" style="font-size: 1.5rem;"></i>
         <div class="flex-grow-1">
-            <strong>You're up!</strong> Queue ${queueNumber} — your number was called. Please proceed to ${serviceLabel}.
+            <strong>Almost your turn!</strong> Queue ${queueNumber} — you're ${count} away. Get ready!
         </div>
         <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
     `;
     statusDiv.insertAdjacentElement('afterend', alert);
-    setTimeout(() => alert.remove(), 20000);
+    setTimeout(() => alert.remove(), 15000);
 }
 
 // Show notification and vibrate when 5 away
@@ -971,7 +1119,7 @@ async function loadMyQueue() {
         const response = await fetch(`${API_BASE}/queue/my-queue`, {
             credentials: 'include'
         });
-        
+
         if (response.ok) {
             const queue = await response.json();
             displayMyQueue(queue);
@@ -990,13 +1138,13 @@ function displayMyQueue(queue) {
         if (statusDiv) statusDiv.innerHTML = '<div class="alert alert-info">No active queue</div>';
         return;
     }
-    
+
     const statusBadge = {
         'waiting': '<span class="badge bg-warning">Waiting</span>',
         'called': '<span class="badge bg-info">Called</span>',
         'serving': '<span class="badge bg-success">Serving</span>'
     }[queue.status] || '<span class="badge bg-secondary">' + queue.status + '</span>';
-    
+
     statusDiv.innerHTML = `
         <div class="alert alert-success">
             <h5>Queue Number: ${queue.queue_number}</h5>
@@ -1012,12 +1160,12 @@ async function handleJoinQueue(e) {
     e.preventDefault();
     const serviceType = document.getElementById('service-type').value;
     const priority = document.getElementById('priority').value;
-    
+
     if (!serviceType) {
         alert('Please select a service');
         return;
     }
-    
+
     try {
         const response = await fetch(`${API_BASE}/queue/join`, {
             method: 'POST',
@@ -1027,9 +1175,9 @@ async function handleJoinQueue(e) {
             credentials: 'include',
             body: JSON.stringify({ service_type: serviceType, priority: priority })
         });
-        
+
         const data = await response.json();
-        
+
         if (response.ok) {
             loadMyQueue();
             // Reset selection
@@ -1042,22 +1190,14 @@ async function handleJoinQueue(e) {
             });
             document.getElementById('service-type').value = '';
             document.getElementById('priority').value = 'regular';
-            
+
             // Show success message
             const statusDiv = document.getElementById('my-queue-status');
             statusDiv.innerHTML = '<div class="alert alert-success"><i class="bi bi-check-circle me-2"></i>Successfully joined queue! Your queue number is being assigned...</div>';
-            
-            // Direct user to Now Serving / My Queue section so they see they joined
-            switchToStudentJoinQueuePanel();
-            setTimeout(() => {
-                const el = document.getElementById('my-queue-status');
-                if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            }, 100);
-            // Refresh queue status after a moment so their number appears
+
+            // Refresh queue status after a moment
             setTimeout(() => {
                 loadMyQueue();
-                const el = document.getElementById('my-queue-status');
-                if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
             }, 1000);
         } else {
             alert(data.error || 'Failed to join queue');
@@ -1073,34 +1213,40 @@ async function handleVerification(e) {
     const fileInput = document.getElementById('receipt-file');
     const referenceNumber = document.getElementById('reference-number').value;
     const accountNumber = document.getElementById('account-number').value;
+    const paymentMethod = document.getElementById('payment-method').value;
+    const paymentAmount = document.getElementById('payment-amount').value;
+    const paymentDate = document.getElementById('payment-date').value;
     const resultDiv = document.getElementById('verification-result');
-    
+
     if (!fileInput.files[0]) {
         alert('Please select a file');
         return;
     }
-    
+
     const formData = new FormData();
     formData.append('file', fileInput.files[0]);
     formData.append('reference_number', referenceNumber);
     formData.append('account_number', accountNumber);
-    
+    formData.append('payment_method', paymentMethod);
+    formData.append('payment_amount', paymentAmount);
+    formData.append('payment_date', paymentDate);
+
     resultDiv.innerHTML = '<div class="alert alert-info">Verifying receipt... Please wait.</div>';
-    
+
     try {
         const response = await fetch(`${API_BASE}/receipts/verify`, {
             method: 'POST',
             credentials: 'include',
             body: formData
         });
-        
+
         const data = await response.json();
-        
+
         if (response.ok) {
             const statusBadge = data.confidence_score >= 90
                 ? '<span class="badge bg-success">VERIFIED</span>'
                 : '<span class="badge bg-danger">NOT VERIFIED</span>';
-            
+
             resultDiv.innerHTML = `
                 <div class="alert alert-${data.confidence_score >= 90 ? 'success' : 'warning'}">
                     <h5>Verification Result: ${statusBadge}</h5>
@@ -1123,7 +1269,7 @@ async function loadStudentHistory() {
         const response = await fetch(`${API_BASE}/transactions/history`, {
             credentials: 'include'
         });
-        
+
         if (response.ok) {
             const history = await response.json();
             displayStudentHistory(history);
@@ -1136,12 +1282,12 @@ async function loadStudentHistory() {
 // Display student history
 function displayStudentHistory(history) {
     const tbody = document.getElementById('student-history-tbody');
-    
+
     if (history.length === 0) {
         tbody.innerHTML = '<tr><td colspan="5" class="text-center">No transaction history</td></tr>';
         return;
     }
-    
+
     tbody.innerHTML = history.map(trans => {
         return `
             <tr>
@@ -1172,8 +1318,6 @@ function stopPolling() {
     }
     hasNotifiedFiveAway = false;
     lastNotifiedQueueId = null;
-    hasVibratedForCalled = false;
-    lastVibratedCalledQueueId = null;
 }
 
 // Admin management (static admin only)
@@ -1213,23 +1357,30 @@ async function loadAdminManagement() {
 async function loadAdminList() {
     const tbody = document.getElementById('admin-list-tbody');
     if (!tbody) return;
+    tbody.innerHTML = '<tr><td colspan="7" class="text-center"><div class="spinner-border spinner-border-sm text-primary"></div> Loading admins...</td></tr>';
     try {
         const response = await fetch(`${API_BASE}/admin/admins`, {
             credentials: 'include'
         });
         const data = await response.json();
         if (!response.ok) {
-            tbody.innerHTML = `<tr><td colspan="6" class="text-center">${data.error || 'Failed to load admins'}</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="7" class="text-center">${data.error || 'Failed to load admins'}</td></tr>`;
             return;
         }
+        const assignedServices = new Set(
+            (data || [])
+                .filter(admin => admin.admin_type === 'appointed' && admin.admin_service)
+                .map(admin => admin.admin_service)
+        );
         tbody.innerHTML = data.map(admin => {
             const isStatic = admin.admin_type === 'static';
             const roleSelect = isStatic
                 ? `<span class="badge bg-secondary">Protected</span>`
                 : `
                     <select class="form-select form-select-sm" id="admin-role-${admin.id}">
+                        <option value="" ${!admin.admin_service ? 'selected' : ''}>Unassigned</option>
                         ${SERVICE_TYPES.map(service => `
-                            <option value="${service}" ${admin.admin_service === service ? 'selected' : ''}>${formatServiceLabel(service)}</option>
+                            <option value="${service}" ${admin.admin_service === service ? 'selected' : ''} ${assignedServices.has(service) && admin.admin_service !== service ? 'disabled' : ''}>${formatServiceLabel(service)}</option>
                         `).join('')}
                     </select>
                 `;
@@ -1241,17 +1392,47 @@ async function loadAdminList() {
                         <button class="btn btn-sm btn-danger" data-admin-action="delete-admin" data-admin-id="${admin.id}">Delete</button>
                     </div>
                 `;
+
+            const hasPassword = admin.plaintext_password && admin.plaintext_password.trim() !== '';
+            const passwordHtml = hasPassword
+                ? `
+                    <div class="d-flex align-items-center" style="min-width: 130px;">
+                        <input type="password" class="form-control form-control-sm border-0 bg-transparent p-0" 
+                            value="${admin.plaintext_password}" readonly id="list-pass-${admin.id}"
+                            style="width: 90px; font-family: monospace;">
+                        <button class="btn btn-sm p-1 ms-1 text-secondary" type="button" onclick="window.toggleListPassword('${admin.id}')">
+                            <i class="bi bi-eye"></i>
+                        </button>
+                    </div>
+                `
+                : `<span class="text-muted fst-italic small"><i class="bi bi-lock"></i> Not Available</span>`;
+
             return `
                 <tr>
                     <td>${admin.name}</td>
                     <td>${admin.email}</td>
-                    <td>${isStatic ? 'Static' : 'Appointed'}</td>
+                    <td>${passwordHtml}</td>
+                    <td><span class="badge ${isStatic ? 'bg-dark' : 'bg-secondary'}">${isStatic ? 'Static' : 'Appointed'}</span></td>
                     <td>${roleSelect}</td>
-                    <td>${admin.created_at ? new Date(admin.created_at).toLocaleString() : '-'}</td>
+                    <td><small class="text-muted">${admin.created_at ? new Date(admin.created_at).toLocaleString() : '-'}</small></td>
                     <td>${actions}</td>
                 </tr>
             `;
         }).join('');
+        const createSelect = document.getElementById('new-admin-role');
+        if (createSelect) {
+            Array.from(createSelect.options).forEach(option => {
+                option.disabled = assignedServices.has(option.value);
+            });
+            if (createSelect.selectedOptions.length && createSelect.selectedOptions[0].disabled) {
+                const firstEnabled = Array.from(createSelect.options).find(option => !option.disabled);
+                if (firstEnabled) createSelect.value = firstEnabled.value;
+            }
+            const createBtn = document.querySelector('#create-admin-form button[type="submit"]');
+            const hasAvailableRole = Array.from(createSelect.options).some(option => !option.disabled);
+            if (createBtn) createBtn.disabled = !hasAvailableRole;
+            createSelect.disabled = !hasAvailableRole;
+        }
     } catch (error) {
         tbody.innerHTML = '<tr><td colspan="6" class="text-center">Connection error</td></tr>';
     }
@@ -1260,6 +1441,7 @@ async function loadAdminList() {
 async function loadUserList() {
     const tbody = document.getElementById('user-list-tbody');
     if (!tbody) return;
+    tbody.innerHTML = '<tr><td colspan="4" class="text-center"><div class="spinner-border spinner-border-sm text-primary"></div> Loading students...</td></tr>';
     try {
         const response = await fetch(`${API_BASE}/admin/users`, {
             credentials: 'include'
@@ -1287,7 +1469,7 @@ async function loadUserList() {
 }
 
 async function updateAdminRole(adminId, adminService) {
-    if (!adminService) return;
+    const normalizedService = adminService || null;
     try {
         const response = await fetch(`${API_BASE}/admin/admins/${adminId}`, {
             method: 'PATCH',
@@ -1295,7 +1477,7 @@ async function updateAdminRole(adminId, adminService) {
                 'Content-Type': 'application/json'
             },
             credentials: 'include',
-            body: JSON.stringify({ admin_service: adminService })
+            body: JSON.stringify({ admin_service: normalizedService })
         });
         const data = await response.json();
         if (!response.ok) {
@@ -1341,5 +1523,128 @@ async function deleteUser(userId) {
         await loadUserList();
     } catch (error) {
         alert('Connection error. Please try again.');
+    }
+}
+
+// Toggle password in admin list table
+window.toggleListPassword = function (adminId) {
+    const input = document.getElementById(`list-pass-${adminId}`);
+    const btn = input.nextElementSibling;
+    const icon = btn.querySelector('i');
+
+    if (input.type === 'password') {
+        input.type = 'text';
+        icon.classList.replace('bi-eye', 'bi-eye-slash');
+    } else {
+        input.type = 'password';
+        icon.classList.replace('bi-eye-slash', 'bi-eye');
+    }
+};
+
+// Service Control functions
+async function loadServiceSettings() {
+    const tbody = document.getElementById('service-settings-tbody');
+    if (!tbody) return;
+
+    try {
+        const response = await fetch(`${API_BASE}/admin/service-settings`, {
+            credentials: 'include'
+        });
+        if (!response.ok) throw new Error('Failed to load settings');
+
+        const settings = await response.json();
+        renderServiceSettings(settings);
+    } catch (error) {
+        console.error('Error loading service settings:', error);
+        tbody.innerHTML = `<tr><td colspan="4" class="text-center text-danger">Error loading settings: ${error.message}</td></tr>`;
+    }
+}
+
+function renderServiceSettings(settings) {
+    const tbody = document.getElementById('service-settings-tbody');
+    if (!tbody) return;
+
+    // Filter settings for appointed admins
+    let filteredSettings = settings;
+    if (currentUser?.admin_type === 'appointed' && currentUser?.admin_service) {
+        filteredSettings = settings.filter(s => s.service_type === currentUser.admin_service);
+    }
+
+    if (filteredSettings.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="4" class="text-center">No service settings available.</td></tr>';
+        return;
+    }
+
+    tbody.innerHTML = filteredSettings.map(setting => {
+        const isOpen = !!setting.is_open;
+        const limit = setting.daily_limit !== null ? setting.daily_limit : '';
+
+        return `
+            <tr>
+                <td>
+                    <div class="fw-bold">${formatServiceLabel(setting.service_type)}</div>
+                    <small class="text-muted">${setting.service_type}</small>
+                </td>
+                <td>
+                    <div class="form-check form-switch">
+                        <input class="form-check-input service-status-toggle" type="checkbox" 
+                            id="status-${setting.service_type}" 
+                            data-service="${setting.service_type}"
+                            ${isOpen ? 'checked' : ''}>
+                        <label class="form-check-label" for="status-${setting.service_type}">
+                            ${isOpen ? '<span class="badge bg-success">Open</span>' : '<span class="badge bg-danger">Closed</span>'}
+                        </label>
+                    </div>
+                </td>
+                <td>
+                    <div class="input-group input-group-sm" style="max-width: 150px;">
+                        <input type="number" class="form-control service-limit-input" 
+                            value="${limit}" 
+                            placeholder="No limit"
+                            data-service="${setting.service_type}"
+                            id="limit-${setting.service_type}">
+                        <button class="btn btn-outline-secondary save-limit-btn" 
+                            type="button" 
+                            data-service="${setting.service_type}">
+                            <i class="bi bi-save"></i>
+                        </button>
+                    </div>
+                </td>
+                <td class="text-end">
+                    <button class="btn btn-sm btn-primary apply-settings-btn" data-service="${setting.service_type}">
+                        Sync Now
+                    </button>
+                </td>
+            </tr>
+        `;
+    }).join('');
+}
+
+// Helper to format service type into readable labels
+function formatServiceLabel(serviceType) {
+    if (!serviceType) return '';
+    return serviceType
+        .split('_')
+        .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+        .join(' ');
+}
+
+async function updateServiceSetting(serviceType, updates) {
+    try {
+        const response = await fetch(`${API_BASE}/admin/service-settings/${serviceType}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify(updates)
+        });
+
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.error || 'Failed to update setting');
+        }
+
+        loadServiceSettings();
+    } catch (error) {
+        alert(error.message);
     }
 }
