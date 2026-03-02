@@ -68,9 +68,23 @@ function formatAdminServiceLabel(service) {
 
 // Initialize app
 document.addEventListener('DOMContentLoaded', function () {
+    removeDuplicateStudentQueueCards();
     initApp();
     setupEventListeners();
 });
+
+function removeDuplicateStudentQueueCards() {
+    const statusBlocks = Array.from(document.querySelectorAll('#my-queue-status'));
+    if (statusBlocks.length <= 1) return;
+    statusBlocks.slice(1).forEach(block => {
+        const card = block.closest('.card');
+        if (card) {
+            card.remove();
+        } else {
+            block.remove();
+        }
+    });
+}
 
 // Check authentication status
 async function checkAuthStatus() {
