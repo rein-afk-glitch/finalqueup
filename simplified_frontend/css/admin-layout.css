@@ -234,6 +234,60 @@
     overflow-y: auto;
 }
 
+/* Compact admin mode */
+.admin-layout.admin-compact-mode .admin-sidebar,
+.admin-layout.admin-compact-mode .admin-main,
+.admin-layout.admin-compact-mode .admin-mobile-restriction {
+    display: none !important;
+}
+
+.admin-compact-panel {
+    flex: 1;
+    width: 100%;
+    height: 100vh;
+    background: var(--usa-black);
+    color: var(--usa-white);
+    padding: 1.5rem;
+    overflow-y: auto;
+}
+
+.admin-compact-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+}
+
+.admin-compact-header h2 {
+    margin: 0;
+    font-size: 1.4rem;
+    font-weight: 700;
+}
+
+.admin-compact-header p {
+    margin: 0.25rem 0 0;
+    font-size: 0.9rem;
+    color: rgba(255, 255, 255, 0.7);
+}
+
+.compact-queue-card {
+    border-radius: 14px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    box-shadow: none;
+}
+
+.compact-queue-card .card-body {
+    padding: 1rem;
+}
+
+.compact-queue-number {
+    font-size: 1.8rem;
+    font-weight: 800;
+    color: var(--usa-red);
+    margin-bottom: 0.25rem;
+}
+
 .content-header {
     margin-bottom: 2.5rem;
 }

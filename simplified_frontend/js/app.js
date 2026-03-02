@@ -24,9 +24,11 @@ let currentUser = null;
 let queuePollInterval = null;
 let statsPollInterval = null;
 let nowServingPollInterval = null;
+let compactQueuePollInterval = null;
 let hasNotifiedFiveAway = false;
 let hasNotifiedTenAway = false;
 let lastNotifiedQueueId = null;
+let lastCalledQueueId = null;
 let analyticsCharts = { numbersServed: null, avgServiceTime: null, peakHours: null };
 
 const SERVICE_TYPES = [
@@ -64,6 +66,11 @@ function formatServiceLabel(service) {
 
 function formatAdminServiceLabel(service) {
     return formatServiceLabel(service);
+}
+
+function isAdminCompactMode() {
+    const params = new URLSearchParams(window.location.search);
+    return params.get('admin_compact') === '1' || params.get('compact_admin') === '1' || params.get('compact') === '1';
 }
 
 // Initialize app
@@ -141,18 +148,23 @@ function showDashboard(role) {
         const oldNameEl = document.getElementById('admin-user-name');
         if (oldNameEl) oldNameEl.textContent = adminName;
 
-        configureAdminView();
+        if (isAdminCompactMode()) {
+            enableAdminCompactMode();
+        } else {
+            disableAdminCompactMode();
+            configureAdminView();
 
-        // Restore tab from hash or default
-        const hash = window.location.hash;
-        if (hash && document.querySelector(`[href="${hash}"]`)) {
-            const targetTabLink = document.querySelector(`[href="${hash}"]`);
-            const tab = new bootstrap.Tab(targetTabLink);
-            tab.show();
+            // Restore tab from hash or default
+            const hash = window.location.hash;
+            if (hash && document.querySelector(`[href="${hash}"]`)) {
+                const targetTabLink = document.querySelector(`[href="${hash}"]`);
+                const tab = new bootstrap.Tab(targetTabLink);
+                tab.show();
+            }
+
+            loadAdminDashboard();
+            loadServiceSettings();
         }
-
-        loadAdminDashboard();
-        loadServiceSettings();
     } else {
         // Put user name in the navbar title (replaces "Student Portal")
         const titleEl = document.getElementById('student-navbar-title');
@@ -165,6 +177,28 @@ function showDashboard(role) {
         if (rightNameEl) rightNameEl.classList.add('d-none');
 
         loadStudentDashboard();
+    }
+}
+
+function enableAdminCompactMode() {
+    const adminDashboard = document.getElementById('admin-dashboard');
+    const compactPanel = document.getElementById('admin-compact-panel');
+    if (adminDashboard) adminDashboard.classList.add('admin-compact-mode');
+    if (compactPanel) compactPanel.classList.remove('d-none');
+    loadAdminCompactQueue();
+    if (!compactQueuePollInterval) {
+        compactQueuePollInterval = setInterval(loadAdminCompactQueue, 3000);
+    }
+}
+
+function disableAdminCompactMode() {
+    const adminDashboard = document.getElementById('admin-dashboard');
+    const compactPanel = document.getElementById('admin-compact-panel');
+    if (adminDashboard) adminDashboard.classList.remove('admin-compact-mode');
+    if (compactPanel) compactPanel.classList.add('d-none');
+    if (compactQueuePollInterval) {
+        clearInterval(compactQueuePollInterval);
+        compactQueuePollInterval = null;
     }
 }
 
@@ -399,6 +433,34 @@ function setupEventListeners() {
         if (e.target.closest('.apply-settings-btn')) {
             loadServiceSettings();
         }
+
+        // Compact admin queue actions
+        const compactActionBtn = e.target.closest('[data-compact-action]');
+        if (compactActionBtn) {
+            const action = compactActionBtn.dataset.compactAction;
+            if (action === 'refresh') {
+                loadAdminCompactQueue();
+                return;
+            }
+            const service = compactActionBtn.dataset.service;
+            if (action === 'call') {
+                const selectEl = document.getElementById(`compact-waiting-${service}`);
+                const queueId = selectEl ? selectEl.value : '';
+                if (!queueId) {
+                    alert('Select a queue number to call.');
+                    return;
+                }
+                queueAction(queueId, 'call').then(loadAdminCompactQueue);
+            }
+            if (action === 'next') {
+                const queueId = compactActionBtn.dataset.queueId;
+                if (!queueId) {
+                    alert('No called queue to advance.');
+                    return;
+                }
+                queueAction(queueId, 'next').then(loadAdminCompactQueue);
+            }
+        }
     });
 }
 
@@ -430,6 +492,7 @@ function showPage(pageId) {
     if (pageId !== 'admin-dashboard' && pageId !== 'student-dashboard') {
         if (statsPollInterval) { clearInterval(statsPollInterval); statsPollInterval = null; }
         if (queuePollInterval) { clearInterval(queuePollInterval); queuePollInterval = null; }
+        if (compactQueuePollInterval) { clearInterval(compactQueuePollInterval); compactQueuePollInterval = null; }
     }
 }
 
@@ -947,6 +1010,95 @@ function loadStudentDashboard() {
     queuePollInterval = setInterval(pollStudentQueue, 3000);
 }
 
+async function loadAdminCompactQueue() {
+    const container = document.getElementById('admin-compact-cards');
+    if (!container) return;
+
+    let serviceType = '';
+    if (currentUser?.admin_type === 'appointed' && currentUser?.admin_service) {
+        serviceType = currentUser.admin_service;
+    }
+
+    try {
+        const url = serviceType
+            ? `${API_BASE}/queue/status?service_type=${serviceType}`
+            : `${API_BASE}/queue/status`;
+        const response = await fetch(url, { credentials: 'include' });
+        if (!response.ok) {
+            container.innerHTML = '<div class="alert alert-danger">Failed to load queues.</div>';
+            return;
+        }
+        const entries = await response.json();
+        const grouped = SERVICE_TYPES.reduce((acc, service) => {
+            acc[service] = [];
+            return acc;
+        }, {});
+        entries.forEach(entry => {
+            if (grouped[entry.service_type]) grouped[entry.service_type].push(entry);
+        });
+
+        const servicesToRender = serviceType ? [serviceType] : SERVICE_TYPES;
+        container.innerHTML = servicesToRender.map(service => {
+            const serviceEntries = grouped[service] || [];
+            const waiting = serviceEntries.filter(e => e.status === 'waiting');
+            const called = serviceEntries.find(e => e.status === 'called');
+            const serving = serviceEntries.find(e => e.status === 'serving');
+            const current = serving || called || waiting[0] || null;
+
+            const statusLabel = serving
+                ? 'Serving'
+                : called
+                    ? 'Called'
+                    : waiting.length
+                        ? 'Waiting'
+                        : 'Idle';
+            const statusClass = serving
+                ? 'bg-success'
+                : called
+                    ? 'bg-info'
+                    : waiting.length
+                        ? 'bg-warning text-dark'
+                        : 'bg-secondary';
+
+            const waitingOptions = waiting.map(entry => {
+                const name = entry.user_name ? ` - ${entry.user_name}` : '';
+                return `<option value="${entry.id}">${entry.queue_number}${name}</option>`;
+            }).join('');
+
+            return `
+                <div class="col-12 col-md-6 col-lg-4">
+                    <div class="card compact-queue-card">
+                        <div class="card-body">
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <div class="fw-bold">${formatServiceLabel(service)}</div>
+                                <span class="badge ${statusClass}">${statusLabel}</span>
+                            </div>
+                            <div class="compact-queue-number">${current ? current.queue_number : '—'}</div>
+                            <div class="text-muted small mb-3">${current ? (current.user_name || '') : 'No active queue'}</div>
+                            <div class="d-flex gap-2 align-items-center mb-2">
+                                <select class="form-select form-select-sm" id="compact-waiting-${service}">
+                                    <option value="">Select queue...</option>
+                                    ${waitingOptions}
+                                </select>
+                                <button class="btn btn-sm btn-primary" data-compact-action="call" data-service="${service}">Call</button>
+                            </div>
+                            <div class="d-flex gap-2">
+                                <button class="btn btn-sm btn-outline-success" data-compact-action="next"
+                                    data-service="${service}" data-queue-id="${called ? called.id : ''}" ${called ? '' : 'disabled'}>
+                                    Next
+                                </button>
+                                <button class="btn btn-sm btn-outline-secondary" data-compact-action="refresh">Refresh</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }).join('');
+    } catch (error) {
+        container.innerHTML = '<div class="alert alert-danger">Connection error.</div>';
+    }
+}
+
 // Request notification permission (for 5-away alert)
 function requestNotificationPermission() {
     if ('Notification' in window && Notification.permission === 'default') {
@@ -1150,6 +1302,7 @@ function displayMyQueue(queue) {
 
     if (!queue) {
         if (statusDiv) statusDiv.innerHTML = '<div class="alert alert-info">No active queue</div>';
+        lastCalledQueueId = null;
         return;
     }
 
@@ -1167,6 +1320,79 @@ function displayMyQueue(queue) {
             ${queue.estimated_wait_time ? `<p>Estimated wait: ${queue.estimated_wait_time} minutes</p>` : ''}
         </div>
     `;
+
+    handleQueueCalledNotification(queue);
+}
+
+function handleQueueCalledNotification(queue) {
+    if (!queue || !['called', 'serving'].includes(queue.status)) {
+        return;
+    }
+    const queueId = queue.id || queue.queue_number;
+    if (queueId === lastCalledQueueId) return;
+    lastCalledQueueId = queueId;
+    triggerQueueCalledAlert(queue);
+}
+
+function triggerQueueCalledAlert(queue) {
+    const label = formatServiceLabel(queue.service_type);
+    const message = `Queue ${queue.queue_number} (${label}) is now being called.`;
+    let vibrated = false;
+
+    if (navigator.vibrate) {
+        vibrated = navigator.vibrate([300, 150, 300, 150, 300]);
+    }
+
+    if (!vibrated) {
+        playQueueCallBeep();
+    }
+
+    showQueueCalledInAppAlert(message);
+
+    if ('Notification' in window && Notification.permission === 'granted') {
+        try {
+            new Notification('Queue Called', { body: message, icon: 'images/university-logo.png' });
+        } catch (_) {
+            new Notification('Queue Called', { body: message });
+        }
+    }
+}
+
+function playQueueCallBeep() {
+    try {
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        const oscillator = ctx.createOscillator();
+        const gain = ctx.createGain();
+        oscillator.type = 'sine';
+        oscillator.frequency.value = 880;
+        gain.gain.value = 0.05;
+        oscillator.connect(gain);
+        gain.connect(ctx.destination);
+        oscillator.start();
+        setTimeout(() => {
+            oscillator.stop();
+            ctx.close();
+        }, 300);
+    } catch (_) {
+        // If audio is blocked, no-op
+    }
+}
+
+function showQueueCalledInAppAlert(message) {
+    const statusDiv = document.getElementById('my-queue-status');
+    if (!statusDiv) return;
+    const alert = document.createElement('div');
+    alert.className = 'alert alert-danger alert-dismissible fade show d-flex align-items-center mt-2';
+    alert.setAttribute('role', 'alert');
+    alert.innerHTML = `
+        <i class="bi bi-broadcast me-2" style="font-size: 1.5rem;"></i>
+        <div class="flex-grow-1">
+            <strong>Queue Called</strong> ${message}
+        </div>
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    `;
+    statusDiv.insertAdjacentElement('afterend', alert);
+    setTimeout(() => alert.remove(), 15000);
 }
 
 // Handle join queue
@@ -1330,8 +1556,13 @@ function stopPolling() {
         clearInterval(nowServingPollInterval);
         nowServingPollInterval = null;
     }
+    if (compactQueuePollInterval) {
+        clearInterval(compactQueuePollInterval);
+        compactQueuePollInterval = null;
+    }
     hasNotifiedFiveAway = false;
     lastNotifiedQueueId = null;
+    lastCalledQueueId = null;
 }
 
 // Admin management (static admin only)
