@@ -180,6 +180,7 @@ function showDashboard(role) {
         if (rightNameEl) rightNameEl.classList.add('d-none');
 
         initNotificationSupport();
+        showNotificationPermissionModal();
         loadStudentDashboard();
     }
 }
@@ -213,6 +214,23 @@ function setupEventListeners() {
 
     // Register form
     document.getElementById('register-form').addEventListener('submit', handleRegister);
+
+    // Notification permission modal action
+    const enableNotificationsBtn = document.getElementById('enable-notifications-btn');
+    if (enableNotificationsBtn) {
+        enableNotificationsBtn.addEventListener('click', () => {
+            if (isNotificationDenied()) {
+                alert('Notifications are blocked. Open your browser site settings and allow notifications for this site.');
+                return;
+            }
+            requestNotificationPermission();
+            requestVibrationPermission();
+            renderNotificationPermissionBanner();
+            const modalEl = document.getElementById('notification-permission-modal');
+            const modal = modalEl ? bootstrap.Modal.getInstance(modalEl) : null;
+            if (modal) modal.hide();
+        });
+    }
 
     // Create admin form (static admin only)
     const createAdminForm = document.getElementById('create-admin-form');
@@ -575,12 +593,21 @@ function canRequestNotifications() {
     return host === 'localhost' || host === '127.0.0.1';
 }
 
+function getNotificationPermission() {
+    if (!('Notification' in window)) return 'unsupported';
+    return Notification.permission;
+}
+
+function isNotificationDenied() {
+    return getNotificationPermission() === 'denied';
+}
+
 function renderNotificationPermissionBanner() {
     const statusDiv = document.getElementById('my-queue-status');
     if (!statusDiv) return;
 
     const existing = document.getElementById('notification-permission-alert');
-    const shouldShow = needsNotificationPrompt() || needsVibrationPrompt();
+    const shouldShow = needsNotificationPrompt() || needsVibrationPrompt() || isNotificationDenied();
 
     if (!shouldShow) {
         if (existing) existing.remove();
@@ -592,20 +619,55 @@ function renderNotificationPermissionBanner() {
     const alert = document.createElement('div');
     alert.id = 'notification-permission-alert';
     alert.className = 'alert alert-warning d-flex align-items-center justify-content-between gap-3';
+    const denied = isNotificationDenied();
+    const message = denied
+        ? 'Notifications are blocked for this site. Enable them in your browser settings.'
+        : 'Enable alerts to get queue notifications and vibration updates.';
+    const buttonLabel = denied ? 'How to enable' : 'Enable';
     alert.innerHTML = `
         <div>
-            <strong>Enable alerts</strong> to get queue notifications and vibration updates.
+            <strong>Enable alerts</strong> ${message}
         </div>
-        <button type="button" class="btn btn-sm btn-dark" id="enable-alerts-btn">Enable</button>
+        <button type="button" class="btn btn-sm btn-dark" id="enable-alerts-btn">${buttonLabel}</button>
     `;
 
     statusDiv.insertAdjacentElement('beforebegin', alert);
     const btn = document.getElementById('enable-alerts-btn');
     if (btn) {
         btn.addEventListener('click', async () => {
+            if (isNotificationDenied()) {
+                showNotificationPermissionModal();
+                return;
+            }
             await initNotificationSupport();
+            showNotificationPermissionModal();
         });
     }
+}
+
+function showNotificationPermissionModal() {
+    const modalEl = document.getElementById('notification-permission-modal');
+    if (!modalEl) return;
+    const permission = getNotificationPermission();
+    if (permission === 'granted' || !canRequestNotifications()) return;
+
+    const statusEl = modalEl.querySelector('[data-notification-status]');
+    if (statusEl) {
+        if (permission === 'denied') {
+            statusEl.textContent = 'Notifications are blocked for this site. Open your browser site settings and allow notifications, then return here.';
+        } else {
+            statusEl.textContent = 'Allow notifications so we can alert you when your queue is 5 away and when you are now serving.';
+        }
+    }
+
+    const enableBtn = modalEl.querySelector('#enable-notifications-btn');
+    if (enableBtn) {
+        enableBtn.disabled = permission === 'denied';
+        enableBtn.textContent = permission === 'denied' ? 'Open Browser Settings' : 'Enable Notifications';
+    }
+
+    const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+    modal.show();
 }
 
 // Handle login

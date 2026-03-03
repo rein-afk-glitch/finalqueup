@@ -1209,6 +1209,30 @@
     </div>
     </div>
 
+    <!-- Notification Permission Modal -->
+    <div class="modal fade" id="notification-permission-modal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Enable Notifications</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <p data-notification-status>
+                        Allow notifications so we can alert you when your queue is 5 away and when you are now serving.
+                    </p>
+                    <p class="text-muted small mb-0">
+                        You can change this later in your browser site settings.
+                    </p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Not now</button>
+                    <button type="button" class="btn btn-primary" id="enable-notifications-btn">Enable Notifications</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Register Modal -->
     <div class="modal fade" id="registerModal" tabindex="-1">
         <div class="modal-dialog">
