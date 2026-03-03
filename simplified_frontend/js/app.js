@@ -557,6 +557,48 @@ async function initNotificationSupport() {
     await ensureServiceWorker();
     requestNotificationPermission();
     requestVibrationPermission();
+    renderNotificationPermissionBanner();
+}
+
+function needsNotificationPrompt() {
+    return 'Notification' in window && Notification.permission === 'default';
+}
+
+function needsVibrationPrompt() {
+    return 'vibrate' in navigator && !localStorage.getItem(VIBRATION_PREF_KEY);
+}
+
+function renderNotificationPermissionBanner() {
+    const statusDiv = document.getElementById('my-queue-status');
+    if (!statusDiv) return;
+
+    const existing = document.getElementById('notification-permission-alert');
+    const shouldShow = needsNotificationPrompt() || needsVibrationPrompt();
+
+    if (!shouldShow) {
+        if (existing) existing.remove();
+        return;
+    }
+
+    if (existing) return;
+
+    const alert = document.createElement('div');
+    alert.id = 'notification-permission-alert';
+    alert.className = 'alert alert-warning d-flex align-items-center justify-content-between gap-3';
+    alert.innerHTML = `
+        <div>
+            <strong>Enable alerts</strong> to get queue notifications and vibration updates.
+        </div>
+        <button type="button" class="btn btn-sm btn-dark" id="enable-alerts-btn">Enable</button>
+    `;
+
+    statusDiv.insertAdjacentElement('beforebegin', alert);
+    const btn = document.getElementById('enable-alerts-btn');
+    if (btn) {
+        btn.addEventListener('click', async () => {
+            await initNotificationSupport();
+        });
+    }
 }
 
 // Handle login
@@ -580,6 +622,7 @@ async function handleLogin(e) {
 
         if (response.ok) {
             currentUser = data;
+            await initNotificationSupport();
             showDashboard(data.role);
             errorDiv.classList.add('d-none');
         } else {
@@ -1025,6 +1068,7 @@ function loadStudentDashboard() {
     loadMyQueue();
     loadStudentHistory();
     loadNowServing();
+    renderNotificationPermissionBanner();
 
     // Combined poll: fetch both my-queue and now-serving, update UI, check for 5-away notification
     const pollStudentQueue = async () => {
