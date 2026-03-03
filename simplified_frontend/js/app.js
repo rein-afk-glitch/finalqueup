@@ -608,6 +608,10 @@ async function handleLogin(e) {
     const password = document.getElementById('login-password').value;
     const errorDiv = document.getElementById('login-error');
 
+    // Request permissions in direct user gesture before async work
+    requestNotificationPermission();
+    requestVibrationPermission();
+
     try {
         const response = await fetch(`${API_BASE}/auth/login`, {
             method: 'POST',
@@ -622,7 +626,6 @@ async function handleLogin(e) {
 
         if (response.ok) {
             currentUser = data;
-            await initNotificationSupport();
             showDashboard(data.role);
             errorDiv.classList.add('d-none');
         } else {
