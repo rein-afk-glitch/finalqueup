@@ -25,6 +25,7 @@ let queuePollInterval = null;
 let statsPollInterval = null;
 let nowServingPollInterval = null;
 let compactQueuePollInterval = null;
+let adminCompactActive = false;
 let hasNotifiedFiveAway = false;
 let hasNotifiedTenAway = false;
 let lastNotifiedQueueId = null;
@@ -71,6 +72,27 @@ function formatAdminServiceLabel(service) {
 function isAdminCompactMode() {
     const params = new URLSearchParams(window.location.search);
     return params.get('admin_compact') === '1' || params.get('compact_admin') === '1' || params.get('compact') === '1';
+}
+
+function shouldUseCompactMode() {
+    return isAdminCompactMode() || window.matchMedia('(max-width: 992px)').matches;
+}
+
+function setCompactQueryParam(enabled) {
+    const url = new URL(window.location.href);
+    url.searchParams.delete('admin_compact');
+    url.searchParams.delete('compact_admin');
+    url.searchParams.delete('compact');
+    if (enabled) {
+        url.searchParams.set('compact', '1');
+    }
+    const nextUrl = `${url.pathname}${url.searchParams.toString() ? `?${url.searchParams}` : ''}${url.hash}`;
+    window.history.replaceState({}, '', nextUrl);
+}
+
+function enterAdminCompactMode() {
+    setCompactQueryParam(true);
+    syncAdminCompactMode(true);
 }
 
 // Initialize app
@@ -148,23 +170,7 @@ function showDashboard(role) {
         const oldNameEl = document.getElementById('admin-user-name');
         if (oldNameEl) oldNameEl.textContent = adminName;
 
-        if (isAdminCompactMode()) {
-            enableAdminCompactMode();
-        } else {
-            disableAdminCompactMode();
-            configureAdminView();
-
-            // Restore tab from hash or default
-            const hash = window.location.hash;
-            if (hash && document.querySelector(`[href="${hash}"]`)) {
-                const targetTabLink = document.querySelector(`[href="${hash}"]`);
-                const tab = new bootstrap.Tab(targetTabLink);
-                tab.show();
-            }
-
-            loadAdminDashboard();
-            loadServiceSettings();
-        }
+        syncAdminCompactMode(true);
     } else {
         // Put user name in the navbar title (replaces "Student Portal")
         const titleEl = document.getElementById('student-navbar-title');
@@ -180,11 +186,47 @@ function showDashboard(role) {
     }
 }
 
+function stopAdminPolling() {
+    if (statsPollInterval) { clearInterval(statsPollInterval); statsPollInterval = null; }
+    if (queuePollInterval) { clearInterval(queuePollInterval); queuePollInterval = null; }
+}
+
+function restoreAdminTabFromHash() {
+    const hash = window.location.hash;
+    if (hash && document.querySelector(`[href="${hash}"]`)) {
+        const targetTabLink = document.querySelector(`[href="${hash}"]`);
+        const tab = new bootstrap.Tab(targetTabLink);
+        tab.show();
+    }
+}
+
+function activateFullAdminView() {
+    disableAdminCompactMode();
+    configureAdminView();
+    restoreAdminTabFromHash();
+    loadAdminDashboard();
+    loadServiceSettings();
+}
+
+function syncAdminCompactMode(force = false) {
+    if (currentUser?.role !== 'admin') return;
+    const wantsCompact = shouldUseCompactMode();
+    if (wantsCompact) {
+        if (!adminCompactActive || force) {
+            enableAdminCompactMode();
+        }
+    } else if (adminCompactActive || force) {
+        activateFullAdminView();
+    }
+}
+
 function enableAdminCompactMode() {
     const adminDashboard = document.getElementById('admin-dashboard');
     const compactPanel = document.getElementById('admin-compact-panel');
     if (adminDashboard) adminDashboard.classList.add('admin-compact-mode');
     if (compactPanel) compactPanel.classList.remove('d-none');
+    adminCompactActive = true;
+    stopAdminPolling();
     loadAdminCompactQueue();
     if (!compactQueuePollInterval) {
         compactQueuePollInterval = setInterval(loadAdminCompactQueue, 3000);
@@ -200,12 +242,14 @@ function disableAdminCompactMode() {
         clearInterval(compactQueuePollInterval);
         compactQueuePollInterval = null;
     }
+    adminCompactActive = false;
 }
 
 // Setup event listeners
 function setupEventListeners() {
     // Login form
     document.getElementById('login-form').addEventListener('submit', handleLogin);
+    window.addEventListener('resize', () => syncAdminCompactMode());
 
     // Register form
     document.getElementById('register-form').addEventListener('submit', handleRegister);
