@@ -33,6 +33,38 @@ body {
     line-height: 1.6;
 }
 
+/* Dashboard loading overlay */
+.dashboard-loading-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 1050;
+    background: radial-gradient(circle at top left, rgba(120, 0, 0, 0.9), rgba(26, 26, 26, 0.98));
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    transition: opacity 0.35s ease;
+    pointer-events: none;
+}
+
+.dashboard-loading-overlay.visible {
+    opacity: 1;
+    pointer-events: all;
+}
+
+.dashboard-loading-inner {
+    text-align: center;
+    color: #ffffff;
+}
+
+.dashboard-loading-text {
+    font-weight: 600;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+    font-size: 0.85rem;
+    opacity: 0.9;
+}
+
 /* Login Page */
 .login-container {
     min-height: 100vh;
@@ -722,6 +754,23 @@ pre {
 
     100% {
         box-shadow: 0 0 0 0 rgba(120, 0, 0, 0);
+        transform: translateY(0);
+    }
+}
+
+/* Dashboard enter animation */
+.dashboard-enter {
+    animation: dashboardFadeIn 0.45s ease-out;
+}
+
+@keyframes dashboardFadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(12px);
+    }
+
+    to {
+        opacity: 1;
         transform: translateY(0);
     }
 }

@@ -149,9 +149,46 @@ function showLogin() {
     showPage('login-page');
 }
 
+function showDashboardLoadingOverlay() {
+    const overlay = document.getElementById('dashboard-loading-overlay');
+    if (!overlay) return;
+
+    overlay.classList.remove('d-none');
+    // Allow the browser to paint before adding the visible class for smooth fade-in
+    requestAnimationFrame(() => {
+        overlay.classList.add('visible');
+    });
+}
+
+function hideDashboardLoadingOverlay(delay = 400) {
+    const overlay = document.getElementById('dashboard-loading-overlay');
+    if (!overlay) return;
+
+    setTimeout(() => {
+        overlay.classList.remove('visible');
+        // Wait for the fade-out transition before disabling display
+        setTimeout(() => {
+            if (!overlay.classList.contains('visible')) {
+                overlay.classList.add('d-none');
+            }
+        }, 350);
+    }, delay);
+}
+
 // Show dashboard based on role
 function showDashboard(role) {
-    showPage(role === 'admin' ? 'admin-dashboard' : 'student-dashboard');
+    showDashboardLoadingOverlay();
+
+    const targetId = role === 'admin' ? 'admin-dashboard' : 'student-dashboard';
+    showPage(targetId);
+
+    const dashboardEl = document.getElementById(targetId);
+    if (dashboardEl) {
+        dashboardEl.classList.add('dashboard-enter');
+        setTimeout(() => {
+            dashboardEl.classList.remove('dashboard-enter');
+        }, 500);
+    }
 
     if (role === 'admin') {
         const adminName = currentUser.name || 'Admin';
@@ -196,6 +233,8 @@ function showDashboard(role) {
             loadAdminDashboard();
             loadServiceSettings();
         }
+
+        hideDashboardLoadingOverlay(600);
     } else {
         // Put user name in the navbar title (replaces "Student Portal")
         const titleEl = document.getElementById('student-navbar-title');
@@ -210,6 +249,8 @@ function showDashboard(role) {
         initNotificationSupport();
         showNotificationPermissionModal();
         loadStudentDashboard();
+
+        hideDashboardLoadingOverlay(600);
     }
 }
 
