@@ -26,10 +26,13 @@ let statsPollInterval = null;
 let nowServingPollInterval = null;
 let compactQueuePollInterval = null;
 let hasNotifiedFiveAway = false;
-let hasNotifiedTenAway = false;
 let lastNotifiedQueueId = null;
 let lastCalledQueueId = null;
 let analyticsCharts = { numbersServed: null, avgServiceTime: null, peakHours: null };
+let serviceWorkerRegistration = null;
+
+const NOTIFICATION_ICON = 'images/university-logo.png';
+const VIBRATION_PREF_KEY = 'queueup_vibration_allowed';
 
 const SERVICE_TYPES = [
     'submission_of_application_forms',
@@ -176,6 +179,7 @@ function showDashboard(role) {
         const rightNameEl = document.getElementById('student-user-name');
         if (rightNameEl) rightNameEl.classList.add('d-none');
 
+        initNotificationSupport();
         loadStudentDashboard();
     }
 }
@@ -519,6 +523,40 @@ async function initApp() {
         console.error('Auth check failed:', error);
         showPage('landing-page');
     }
+}
+
+async function ensureServiceWorker() {
+    if (!('serviceWorker' in navigator)) return null;
+    if (serviceWorkerRegistration) return serviceWorkerRegistration;
+    try {
+        const registration = await navigator.serviceWorker.register('sw.js');
+        serviceWorkerRegistration = registration;
+        return registration;
+    } catch (error) {
+        console.warn('Service worker registration failed:', error);
+        return null;
+    }
+}
+
+function requestVibrationPermission() {
+    if (!('vibrate' in navigator)) return;
+    const stored = localStorage.getItem(VIBRATION_PREF_KEY);
+    if (stored === 'granted' || stored === 'denied') return;
+    const allow = confirm('Allow vibration alerts for your queue updates?');
+    localStorage.setItem(VIBRATION_PREF_KEY, allow ? 'granted' : 'denied');
+    if (allow) {
+        navigator.vibrate(20);
+    }
+}
+
+function isVibrationEnabled() {
+    return localStorage.getItem(VIBRATION_PREF_KEY) === 'granted';
+}
+
+async function initNotificationSupport() {
+    await ensureServiceWorker();
+    requestNotificationPermission();
+    requestVibrationPermission();
 }
 
 // Handle login
@@ -987,7 +1025,6 @@ function loadStudentDashboard() {
     loadMyQueue();
     loadStudentHistory();
     loadNowServing();
-    requestNotificationPermission();
 
     // Combined poll: fetch both my-queue and now-serving, update UI, check for 5-away notification
     const pollStudentQueue = async () => {
@@ -1106,6 +1143,33 @@ function requestNotificationPermission() {
     }
 }
 
+async function showQueueNotification(title, body, tag) {
+    if (!('Notification' in window) || Notification.permission !== 'granted') return;
+    const options = {
+        body,
+        icon: NOTIFICATION_ICON,
+        tag,
+        renotify: true,
+        data: { url: window.location.href }
+    };
+
+    try {
+        const registration = await ensureServiceWorker();
+        if (registration) {
+            await registration.showNotification(title, options);
+            return;
+        }
+    } catch (_) {
+        // Fall back to window notifications below.
+    }
+
+    try {
+        new Notification(title, options);
+    } catch (_) {
+        new Notification(title, { body });
+    }
+}
+
 // Parse numeric part from queue number (e.g. "AF10" -> 10, "PY01" -> 1)
 function parseQueueNumber(queueNumber) {
     if (!queueNumber || typeof queueNumber !== 'string') return null;
@@ -1120,7 +1184,6 @@ function checkQueuePositionNotification(myQueue, servingData) {
     // Reset notification state when user leaves queue or gets called/serving
     if (myQueue.status !== 'waiting') {
         hasNotifiedFiveAway = false;
-        hasNotifiedTenAway = false;
         lastNotifiedQueueId = null;
         return;
     }
@@ -1137,12 +1200,6 @@ function checkQueuePositionNotification(myQueue, servingData) {
     const positionAway = myNumber - currentNumber;
     if (positionAway <= 0) return;
 
-    // User is 10 away
-    if (positionAway === 10 && !hasNotifiedTenAway) {
-        hasNotifiedTenAway = true;
-        triggerPositionNotification(myQueue.queue_number, formatServiceLabel(service), 10);
-    }
-
     // User is 5 away - notify once per queue session
     if (positionAway === 5 && !hasNotifiedFiveAway) {
         hasNotifiedFiveAway = true;
@@ -1155,15 +1212,9 @@ function triggerPositionNotification(queueNumber, serviceLabel, count) {
     const title = 'Almost your turn!';
     const body = `Queue ${queueNumber} (${serviceLabel}) — you're ${count} away. Get ready!`;
 
-    if ('Notification' in window && Notification.permission === 'granted') {
-        try {
-            new Notification(title, { body, icon: 'images/university-logo.png' });
-        } catch (_) {
-            new Notification(title, { body });
-        }
-    }
+    showQueueNotification(title, body, `queueup-${queueNumber}-away-${count}`);
 
-    if (navigator.vibrate) {
+    if (navigator.vibrate && isVibrationEnabled()) {
         navigator.vibrate([200, 100, 200, 100, 200]);
     }
 
@@ -1182,45 +1233,6 @@ function showPositionInAppAlert(queueNumber, serviceLabel, count) {
         <i class="bi bi-bell-fill me-2" style="font-size: 1.5rem;"></i>
         <div class="flex-grow-1">
             <strong>Almost your turn!</strong> Queue ${queueNumber} — you're ${count} away. Get ready!
-        </div>
-        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-    `;
-    statusDiv.insertAdjacentElement('afterend', alert);
-    setTimeout(() => alert.remove(), 15000);
-}
-
-// Show notification and vibrate when 5 away
-function triggerFiveAwayNotification(queueNumber, serviceLabel) {
-    const title = 'Almost your turn!';
-    const body = `Queue ${queueNumber} (${serviceLabel}) — you're 5 away. Get ready!`;
-
-    if ('Notification' in window && Notification.permission === 'granted') {
-        try {
-            new Notification(title, { body, icon: 'images/university-logo.png' });
-        } catch (_) {
-            new Notification(title, { body });
-        }
-    }
-
-    if (navigator.vibrate) {
-        navigator.vibrate([200, 100, 200, 100, 200]);
-    }
-
-    // In-app fallback: show prominent alert in queue status area
-    showFiveAwayInAppAlert(queueNumber, serviceLabel);
-}
-
-// In-app alert when 5 away (fallback if notifications blocked)
-function showFiveAwayInAppAlert(queueNumber, serviceLabel) {
-    const statusDiv = document.getElementById('my-queue-status');
-    if (!statusDiv) return;
-    const alert = document.createElement('div');
-    alert.className = 'alert alert-warning alert-dismissible fade show d-flex align-items-center';
-    alert.setAttribute('role', 'alert');
-    alert.innerHTML = `
-        <i class="bi bi-bell-fill me-2" style="font-size: 1.5rem;"></i>
-        <div class="flex-grow-1">
-            <strong>Almost your turn!</strong> Queue ${queueNumber} — you're 5 away. Get ready!
         </div>
         <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
     `;
@@ -1325,7 +1337,7 @@ function displayMyQueue(queue) {
 }
 
 function handleQueueCalledNotification(queue) {
-    if (!queue || !['called', 'serving'].includes(queue.status)) {
+    if (!queue || queue.status !== 'serving') {
         return;
     }
     const queueId = queue.id || queue.queue_number;
@@ -1336,10 +1348,10 @@ function handleQueueCalledNotification(queue) {
 
 function triggerQueueCalledAlert(queue) {
     const label = formatServiceLabel(queue.service_type);
-    const message = `Queue ${queue.queue_number} (${label}) is now being called.`;
+    const message = `Queue ${queue.queue_number} (${label}) is now serving.`;
     let vibrated = false;
 
-    if (navigator.vibrate) {
+    if (navigator.vibrate && isVibrationEnabled()) {
         vibrated = navigator.vibrate([300, 150, 300, 150, 300]);
     }
 
@@ -1349,13 +1361,7 @@ function triggerQueueCalledAlert(queue) {
 
     showQueueCalledInAppAlert(message);
 
-    if ('Notification' in window && Notification.permission === 'granted') {
-        try {
-            new Notification('Queue Called', { body: message, icon: 'images/university-logo.png' });
-        } catch (_) {
-            new Notification('Queue Called', { body: message });
-        }
-    }
+    showQueueNotification('Now Serving', message, `queueup-now-serving-${queue.id || queue.queue_number}`);
 }
 
 function playQueueCallBeep() {
