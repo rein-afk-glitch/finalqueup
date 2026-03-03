@@ -1453,10 +1453,6 @@ pre {
 }
 
 @media (max-width: 992px) {
-    #admin-dashboard.admin-compact-mode .admin-mobile-restriction {
-        display: none !important;
-    }
-
     #admin-dashboard .admin-mobile-restriction {
         display: flex;
     }
