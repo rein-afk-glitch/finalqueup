@@ -271,21 +271,6 @@
     color: rgba(255, 255, 255, 0.7);
 }
 
-.admin-compact-actions {
-    position: fixed;
-    right: 1.5rem;
-    bottom: 1.5rem;
-    display: flex;
-    gap: 0.5rem;
-    z-index: 1000;
-}
-
-@media (min-width: 993px) {
-    .admin-compact-actions {
-        display: none;
-    }
-}
-
 .compact-queue-card {
     border-radius: 14px;
     border: 1px solid rgba(255, 255, 255, 0.08);

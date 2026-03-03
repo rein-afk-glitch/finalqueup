@@ -159,14 +159,7 @@
                         <h2>Queue Control</h2>
                         <p>Compact admin mode for quick queue actions.</p>
                     </div>
-                </div>
-                <div class="admin-compact-actions">
-                    <button class="btn btn-light btn-sm" onclick="setCompactQueryParam(false); syncAdminCompactMode(true);" title="Full Admin">
-                        <i class="bi bi-arrows-fullscreen"></i>
-                    </button>
-                    <button class="btn btn-outline-light btn-sm" onclick="logout()" title="Logout">
-                        <i class="bi bi-box-arrow-left"></i>
-                    </button>
+                    <button class="btn btn-outline-light btn-sm" onclick="logout()">Logout</button>
                 </div>
                 <div class="row g-3" id="admin-compact-cards"></div>
             </div>
@@ -267,9 +260,6 @@
                         <input type="text" placeholder="Search queues or students...">
                     </div>
                     <div class="header-actions">
-                        <button class="btn btn-outline-dark btn-sm" onclick="enterAdminCompactMode()" title="Compact Mode">
-                            <i class="bi bi-dash-lg"></i>
-                        </button>
                         <div class="user-profile">
                             <div class="user-info">
                                 <span id="admin-header-name">Admin User</span>

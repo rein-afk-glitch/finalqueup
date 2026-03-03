@@ -78,23 +78,6 @@ function shouldUseCompactMode() {
     return isAdminCompactMode() || window.matchMedia('(max-width: 992px)').matches;
 }
 
-function setCompactQueryParam(enabled) {
-    const url = new URL(window.location.href);
-    url.searchParams.delete('admin_compact');
-    url.searchParams.delete('compact_admin');
-    url.searchParams.delete('compact');
-    if (enabled) {
-        url.searchParams.set('compact', '1');
-    }
-    const nextUrl = `${url.pathname}${url.searchParams.toString() ? `?${url.searchParams}` : ''}${url.hash}`;
-    window.history.replaceState({}, '', nextUrl);
-}
-
-function enterAdminCompactMode() {
-    setCompactQueryParam(true);
-    syncAdminCompactMode(true);
-}
-
 // Initialize app
 document.addEventListener('DOMContentLoaded', function () {
     removeDuplicateStudentQueueCards();
