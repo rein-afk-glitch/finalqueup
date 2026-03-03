@@ -561,11 +561,18 @@ async function initNotificationSupport() {
 }
 
 function needsNotificationPrompt() {
-    return 'Notification' in window && Notification.permission === 'default';
+    return 'Notification' in window && Notification.permission === 'default' && canRequestNotifications();
 }
 
 function needsVibrationPrompt() {
     return 'vibrate' in navigator && !localStorage.getItem(VIBRATION_PREF_KEY);
+}
+
+function canRequestNotifications() {
+    if (!('Notification' in window)) return false;
+    if (window.isSecureContext) return true;
+    const host = window.location.hostname;
+    return host === 'localhost' || host === '127.0.0.1';
 }
 
 function renderNotificationPermissionBanner() {
@@ -1186,6 +1193,10 @@ async function loadAdminCompactQueue() {
 // Request notification permission (for 5-away alert)
 function requestNotificationPermission() {
     if ('Notification' in window && Notification.permission === 'default') {
+        if (!canRequestNotifications()) {
+            alert('Notifications require a secure (HTTPS) connection. Please open this site over HTTPS to enable alerts.');
+            return;
+        }
         Notification.requestPermission();
     }
 }
