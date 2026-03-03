@@ -58,6 +58,34 @@ const SERVICE_LABELS = {
 
 const ADMIN_SERVICE_LABELS = SERVICE_LABELS;
 
+function scrollToMyQueueSection() {
+    const statusEl = document.getElementById('my-queue-status');
+    if (!statusEl) return;
+
+    const target = statusEl.closest('.card') || statusEl;
+
+    // Smooth scroll into view
+    try {
+        target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    } catch (_) {
+        window.scrollTo({
+            top: target.getBoundingClientRect().top + window.scrollY - 80,
+            behavior: 'smooth'
+        });
+    }
+
+    // Trigger highlight animation (restart if already applied)
+    target.classList.remove('my-queue-highlight');
+    // Force reflow so the animation can replay
+    void target.offsetWidth;
+    target.classList.add('my-queue-highlight');
+
+    // Clean up class after animation duration
+    setTimeout(() => {
+        target.classList.remove('my-queue-highlight');
+    }, 800);
+}
+
 function isStaticAdmin() {
     return currentUser?.role === 'admin' && currentUser?.admin_type === 'static';
 }
@@ -293,6 +321,9 @@ function setupEventListeners() {
                     document.getElementById('join-queue-form').dispatchEvent(new Event('submit'));
                 }, 200);
             }
+
+            // Smoothly scroll to "My Current Queue" and highlight it
+            scrollToMyQueueSection();
         }
 
         // Priority button clicks
