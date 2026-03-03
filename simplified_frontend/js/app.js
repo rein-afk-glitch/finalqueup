@@ -438,10 +438,6 @@ function setupEventListeners() {
         const compactActionBtn = e.target.closest('[data-compact-action]');
         if (compactActionBtn) {
             const action = compactActionBtn.dataset.compactAction;
-            if (action === 'refresh') {
-                loadAdminCompactQueue();
-                return;
-            }
             const service = compactActionBtn.dataset.service;
             if (action === 'call') {
                 const selectEl = document.getElementById(`compact-waiting-${service}`);
@@ -459,6 +455,22 @@ function setupEventListeners() {
                     return;
                 }
                 queueAction(queueId, 'next').then(loadAdminCompactQueue);
+            }
+            if (action === 'complete') {
+                const queueId = compactActionBtn.dataset.queueId;
+                if (!queueId) {
+                    alert('No serving queue to complete.');
+                    return;
+                }
+                queueAction(queueId, 'complete').then(loadAdminCompactQueue);
+            }
+            if (action === 'no_show') {
+                const queueId = compactActionBtn.dataset.queueId;
+                if (!queueId) {
+                    alert('No serving queue to mark as no show.');
+                    return;
+                }
+                queueAction(queueId, 'no_show').then(loadAdminCompactQueue);
             }
         }
     });
@@ -1065,6 +1077,10 @@ async function loadAdminCompactQueue() {
                 return `<option value="${entry.id}">${entry.queue_number}${name}</option>`;
             }).join('');
 
+            const callDisabled = waiting.length === 0;
+            const calledId = called ? called.id : '';
+            const servingId = serving ? serving.id : '';
+
             return `
                 <div class="col-12 col-md-6 col-lg-4">
                     <div class="card compact-queue-card">
@@ -1080,14 +1096,21 @@ async function loadAdminCompactQueue() {
                                     <option value="">Select queue...</option>
                                     ${waitingOptions}
                                 </select>
-                                <button class="btn btn-sm btn-primary" data-compact-action="call" data-service="${service}">Call</button>
+                                <button class="btn btn-sm btn-primary" data-compact-action="call" data-service="${service}" ${callDisabled ? 'disabled' : ''}>Call</button>
                             </div>
-                            <div class="d-flex gap-2">
+                            <div class="d-flex flex-wrap gap-2">
                                 <button class="btn btn-sm btn-outline-success" data-compact-action="next"
-                                    data-service="${service}" data-queue-id="${called ? called.id : ''}" ${called ? '' : 'disabled'}>
+                                    data-service="${service}" data-queue-id="${calledId}" ${called ? '' : 'disabled'}>
                                     Next
                                 </button>
-                                <button class="btn btn-sm btn-outline-secondary" data-compact-action="refresh">Refresh</button>
+                                <button class="btn btn-sm btn-outline-primary" data-compact-action="complete"
+                                    data-service="${service}" data-queue-id="${servingId}" ${serving ? '' : 'disabled'}>
+                                    Complete
+                                </button>
+                                <button class="btn btn-sm btn-outline-danger" data-compact-action="no_show"
+                                    data-service="${service}" data-queue-id="${servingId}" ${serving ? '' : 'disabled'}>
+                                    No Show
+                                </button>
                             </div>
                         </div>
                     </div>
