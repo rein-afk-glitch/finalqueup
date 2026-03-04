@@ -294,7 +294,6 @@ function setupEventListeners() {
                 return;
             }
             const permission = await requestNotificationPermission();
-            requestVibrationPermission();
             if (permission === 'granted') {
                 await ensurePushSubscription();
             }
@@ -302,6 +301,15 @@ function setupEventListeners() {
             const modalEl = document.getElementById('notification-permission-modal');
             const modal = modalEl ? bootstrap.Modal.getInstance(modalEl) : null;
             if (modal) modal.hide();
+        });
+    }
+
+    const enableVibrationBtn = document.getElementById('enable-vibration-btn');
+    if (enableVibrationBtn) {
+        enableVibrationBtn.addEventListener('click', () => {
+            requestVibrationPermission();
+            renderNotificationPermissionBanner();
+            showNotificationPermissionModal();
         });
     }
 
@@ -711,7 +719,6 @@ function isVibrationEnabled() {
 async function initNotificationSupport() {
     await ensureServiceWorker();
     const permission = await requestNotificationPermission();
-    requestVibrationPermission();
     if (permission === 'granted') {
         await ensurePushSubscription();
     }
@@ -783,7 +790,9 @@ function renderNotificationPermissionBanner() {
     if (!statusDiv) return;
 
     const existing = document.getElementById('notification-permission-alert');
-    const shouldShow = needsNotificationPrompt() || needsVibrationPrompt() || isNotificationDenied();
+    const permission = getNotificationPermission();
+    const unsupported = permission === 'unsupported';
+    const shouldShow = needsNotificationPrompt() || needsVibrationPrompt() || isNotificationDenied() || unsupported;
 
     if (!shouldShow) {
         if (existing) existing.remove();
@@ -796,10 +805,12 @@ function renderNotificationPermissionBanner() {
     alert.id = 'notification-permission-alert';
     alert.className = 'alert alert-warning d-flex align-items-center justify-content-between gap-3';
     const denied = isNotificationDenied();
-    const message = denied
-        ? 'Notifications are blocked for this site. Enable them in your browser settings.'
-        : 'Enable alerts to get queue notifications and vibration updates.';
-    const buttonLabel = denied ? 'How to enable' : 'Enable';
+    const message = unsupported
+        ? 'Notifications are not supported on this browser. Use a supported browser or install this site as an app where available.'
+        : (denied
+            ? 'Notifications are blocked for this site. Enable them in your browser settings.'
+            : 'Enable alerts to get queue notifications and vibration updates.');
+    const buttonLabel = (denied || unsupported) ? 'How to enable' : 'Enable';
     alert.innerHTML = `
         <div>
             <strong>Enable alerts</strong> ${message}
@@ -825,12 +836,19 @@ function showNotificationPermissionModal() {
     const modalEl = document.getElementById('notification-permission-modal');
     if (!modalEl) return;
     const permission = getNotificationPermission();
-    if (permission === 'granted' || !canRequestNotifications()) return;
+    const canRequest = canRequestNotifications();
+    const needsVibration = needsVibrationPrompt();
+    if (permission === 'granted' && !needsVibration) return;
 
     const statusEl = modalEl.querySelector('[data-notification-status]');
     const stepsEl = modalEl.querySelector('#notification-help-steps');
+    const vibrationBlock = modalEl.querySelector('#vibration-permission-block');
     if (statusEl) {
-        if (permission === 'denied') {
+        if (permission === 'unsupported') {
+            statusEl.textContent = 'Notifications are not supported in this browser. On iOS, install this site as a web app and enable notifications in iOS Settings.';
+        } else if (!canRequest) {
+            statusEl.textContent = 'Notifications require a secure (HTTPS) connection. Open this site over HTTPS to enable alerts.';
+        } else if (permission === 'denied') {
             statusEl.textContent = 'Notifications are blocked for this site. Follow the steps below to enable them, then return here.';
         } else {
             statusEl.textContent = 'Allow notifications so we can alert you when your queue is 5 away and when you are now serving.';
@@ -846,11 +864,15 @@ function showNotificationPermissionModal() {
             stepsEl.classList.add('d-none');
         }
     }
+    if (vibrationBlock) {
+        vibrationBlock.classList.toggle('d-none', !needsVibration);
+    }
 
     const enableBtn = modalEl.querySelector('#enable-notifications-btn');
     if (enableBtn) {
-        enableBtn.disabled = permission === 'denied';
-        enableBtn.textContent = permission === 'denied' ? 'Open Browser Settings' : 'Enable Notifications';
+        const disable = permission === 'denied' || permission === 'unsupported' || !canRequest;
+        enableBtn.disabled = disable;
+        enableBtn.textContent = disable ? 'Open Browser Settings' : 'Enable Notifications';
     }
 
     const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
@@ -866,7 +888,6 @@ async function handleLogin(e) {
 
     // Request permissions in direct user gesture before async work
     const permission = await requestNotificationPermission();
-    requestVibrationPermission();
     if (permission === 'granted') {
         await ensurePushSubscription();
     }
@@ -1652,7 +1673,7 @@ function displayMyQueue(queue) {
 }
 
 function handleQueueCalledNotification(queue) {
-    if (!queue || queue.status !== 'serving') {
+    if (!queue || (queue.status !== 'called' && queue.status !== 'serving')) {
         return;
     }
     const queueId = queue.id || queue.queue_number;
@@ -1663,7 +1684,8 @@ function handleQueueCalledNotification(queue) {
 
 function triggerQueueCalledAlert(queue) {
     const label = formatServiceLabel(queue.service_type);
-    const message = `Queue ${queue.queue_number} (${label}) is now serving.`;
+    const statusText = queue.status === 'called' ? 'is now being called.' : 'is now serving.';
+    const message = `Queue ${queue.queue_number} (${label}) ${statusText}`;
     let vibrated = false;
 
     if (navigator.vibrate && isVibrationEnabled()) {
@@ -1676,7 +1698,8 @@ function triggerQueueCalledAlert(queue) {
 
     showQueueCalledInAppAlert(message);
 
-    showQueueNotification('Now Serving', message, `queueup-now-serving-${queue.id || queue.queue_number}`);
+    const notificationTitle = queue.status === 'called' ? 'Queue Called' : 'Now Serving';
+    showQueueNotification(notificationTitle, message, `queueup-now-serving-${queue.id || queue.queue_number}`);
 }
 
 function playQueueCallBeep() {
