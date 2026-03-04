@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+venv/
+.venv/
+.env
+test_results.txt
+.history/
+.vscode/
+node_modules/
+dist/
+build/

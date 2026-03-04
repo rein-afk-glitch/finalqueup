@@ -1072,12 +1072,17 @@ def verify_receipt():
         image = Image.open(BytesIO(image_data))
         
         # Verify with Google Generative AI
-        if not os.getenv('GOOGLE_API_KEY'):
-            return jsonify({'error': 'AI verification not configured'}), 500
+        response_text = "AI Verification skipped (No API Key)"
+        verified = False
+        confidence_score = 0.0
+        verification_status = "PENDING"
         
-        model = genai.GenerativeModel('gemini-2.0-flash-exp')
-        
-        prompt = f"""Please analyze this receipt image and verify if it matches:
+        google_key = os.getenv('GOOGLE_API_KEY')
+        if google_key:
+            try:
+                model = genai.GenerativeModel('gemini-2.0-flash')
+                
+                prompt = f"""Please analyze this receipt image and verify if it matches:
 Reference Number: {reference_number}
 Account Number: {account_number}
 
@@ -1091,15 +1096,18 @@ Extract the following information:
 
 Compare the extracted reference number and account number with the provided values. 
 Determine if this is a valid receipt for the University of San Agustin accounting office."""
-        
-        response = model.generate_content([prompt, image])
-        response_text = response.text
-        
-        # Determine verification status
-        verified = (reference_number.upper() in response_text.upper() or 
-                   account_number in response_text)
-        confidence_score = 95.0 if verified else 25.0
-        verification_status = "VERIFIED" if verified else "NOT_VERIFIED"
+                
+                response = model.generate_content([prompt, image])
+                response_text = response.text
+                
+                # Determine verification status
+                verified = (reference_number.upper() in response_text.upper() or 
+                           account_number in response_text)
+                confidence_score = 95.0 if verified else 25.0
+                verification_status = "VERIFIED" if verified else "NOT_VERIFIED"
+            except Exception as ai_err:
+                response_text = f"AI Error: {str(ai_err)}"
+                print(f"Gemini AI error: {ai_err}")
         
         # Optional: Secondary verification with n8n (if configured)
         n8n_verified = False
@@ -1107,8 +1115,7 @@ Determine if this is a valid receipt for the University of San Agustin accountin
         if n8n_url:
             try:
                 # Prepare data for n8n
-                # We send the fields and the file
-                file.seek(0) # Reset file pointer before sending
+                file.seek(0)
                 n8n_response = requests.post(
                     n8n_url,
                     data={
@@ -1121,17 +1128,37 @@ Determine if this is a valid receipt for the University of San Agustin accountin
                         'user_name': user['name']
                     },
                     files={'file': (file.filename, image_data, file.content_type)},
-                    timeout=10
+                    timeout=30 # Increased timeout for n8n processing
                 )
+                
                 if n8n_response.status_code == 200:
                     n8n_data = n8n_response.json()
                     n8n_verified = n8n_data.get('verified', False)
-                    # If n8n confirmed it, we can boost the confidence
+                    
                     if n8n_verified:
-                        confidence_score = max(confidence_score, 98.0)
+                        confidence_score = 100.0
                         verification_status = "VERIFIED"
+                        verified = True
+                    else:
+                        confidence_score = 0.0
+                        verification_status = "NOT_VERIFIED"
+                        verified = False
+                else:
+                    # If n8n errors out, we don't assume verified
+                    verification_status = "NOT_VERIFIED"
+                    confidence_score = 0.0
+                    verified = False
             except Exception as n8n_err:
                 print(f"n8n integration error: {n8n_err}")
+                # Keep existing Gemini status but maybe lower confidence if n8n-dependent
+                if verification_status == "VERIFIED":
+                     confidence_score = 85.0 # Pre-verified but record match failed/timed out
+        
+        # Final safety check: if n8n is configured, it MUST be the source of truth
+        if n8n_url and not n8n_verified:
+            verification_status = "NOT_VERIFIED"
+            confidence_score = min(confidence_score, 40.0)
+            verified = False
 
         # Save verification
         conn = get_db_connection()

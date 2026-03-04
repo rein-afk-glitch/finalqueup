@@ -1547,6 +1547,15 @@ function checkQueuePositionNotification(myQueue, servingData) {
     }
 }
 
+// Play notification sound
+function playNotificationSound() {
+    const sound = document.getElementById('notification-sound');
+    if (sound) {
+        sound.currentTime = 0;
+        sound.play().catch(err => console.log('Audio playback delayed until user interaction:', err));
+    }
+}
+
 // Show notification and vibrate when 5/10 away
 function triggerPositionNotification(queueNumber, serviceLabel, count) {
     const title = 'Almost your turn!';
@@ -1557,6 +1566,9 @@ function triggerPositionNotification(queueNumber, serviceLabel, count) {
     if (navigator.vibrate) {
         navigator.vibrate([200, 100, 200, 100, 200]);
     }
+
+    // Play ringing sound
+    playNotificationSound();
 
     // In-app fallback: show prominent alert in queue status area
     showPositionInAppAlert(queueNumber, serviceLabel, count);
@@ -1831,16 +1843,15 @@ async function handleVerification(e) {
         const data = await response.json();
 
         if (response.ok) {
-            const statusBadge = data.confidence_score >= 90
+            const isVerified = data.confidence_score >= 90;
+            const statusBadge = isVerified
                 ? '<span class="badge bg-success">VERIFIED</span>'
                 : '<span class="badge bg-danger">NOT VERIFIED</span>';
 
             resultDiv.innerHTML = `
-                <div class="alert alert-${data.confidence_score >= 90 ? 'success' : 'warning'}">
+                <div class="alert alert-${isVerified ? 'success' : 'warning'}">
                     <h5>Verification Result: ${statusBadge}</h5>
-                    <p>Confidence Score: ${data.confidence_score}%</p>
-                    <p><strong>AI Analysis:</strong></p>
-                    <pre class="bg-light p-2">${data.verification_result}</pre>
+                    ${isVerified ? '<p class="mb-0 mt-2 text-success"><i class="bi bi-check-circle-fill me-1"></i> This receipt has been matched with our bank records and your payment is now recorded.</p>' : '<p class="mb-0 mt-2 text-danger"><i class="bi bi-exclamation-triangle-fill me-1"></i> We couldn\'t verify this receipt. Please double-check the reference number or contact support.</p>'}
                 </div>
             `;
         } else {
