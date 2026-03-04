@@ -1,0 +1,16 @@
+{
+  "name": "QueueUp",
+  "short_name": "QueueUp",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#1f1f1f",
+  "theme_color": "#6b1010",
+  "icons": [
+    {
+      "src": "images/university-logo.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}
