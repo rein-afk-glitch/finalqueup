@@ -1,4 +1,5 @@
 from flask import Flask, request, jsonify, session
+import re
 from flask_cors import CORS
 import mysql.connector
 from mysql.connector import pooling
@@ -16,6 +17,7 @@ from io import BytesIO
 from PIL import Image
 from flask import send_from_directory
 import requests
+from pywebpush import webpush, WebPushException
 # Load environment variables
 load_dotenv()
 
@@ -178,6 +180,8 @@ def init_db():
                 priority VARCHAR(20) DEFAULT 'regular',
                 status VARCHAR(20) DEFAULT 'waiting',
                 estimated_wait_time INT,
+                notified_five_away TINYINT(1) DEFAULT 0,
+                notified_called TINYINT(1) DEFAULT 0,
                 called_at TIMESTAMP NULL,
                 completed_at TIMESTAMP NULL,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -187,6 +191,12 @@ def init_db():
                 INDEX idx_user_id (user_id)
             )
         """)
+        cursor.execute("SHOW COLUMNS FROM queue_entries LIKE 'notified_five_away'")
+        if not cursor.fetchone():
+            cursor.execute("ALTER TABLE queue_entries ADD COLUMN notified_five_away TINYINT(1) DEFAULT 0")
+        cursor.execute("SHOW COLUMNS FROM queue_entries LIKE 'notified_called'")
+        if not cursor.fetchone():
+            cursor.execute("ALTER TABLE queue_entries ADD COLUMN notified_called TINYINT(1) DEFAULT 0")
         
         # Transaction history table
         cursor.execute("""
@@ -236,6 +246,22 @@ def init_db():
                 is_open BOOLEAN DEFAULT TRUE,
                 daily_limit INT DEFAULT NULL,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+            )
+        """)
+
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS push_subscriptions (
+                id VARCHAR(36) PRIMARY KEY,
+                user_id VARCHAR(36) NOT NULL,
+                endpoint VARCHAR(1024) NOT NULL,
+                p256dh VARCHAR(255) NOT NULL,
+                auth VARCHAR(255) NOT NULL,
+                user_agent VARCHAR(255),
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                UNIQUE KEY uq_endpoint (endpoint(255)),
+                INDEX idx_user_id (user_id),
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
             )
         """)
         
@@ -351,6 +377,193 @@ def get_current_user():
         user.pop('password', None)  # Remove password from response
     return user
 
+def get_vapid_config():
+    public_key = os.getenv('VAPID_PUBLIC_KEY')
+    private_key = os.getenv('VAPID_PRIVATE_KEY')
+    subject = os.getenv('VAPID_SUBJECT', 'mailto:queueup@example.com')
+    if not public_key or not private_key:
+        return None
+    return public_key, private_key, subject
+
+def parse_queue_numeric(queue_number):
+    if not queue_number:
+        return None
+    match = re.search(r'(\d+)$', str(queue_number))
+    return int(match.group(1)) if match else None
+
+def get_user_subscriptions(user_id):
+    conn = get_db_connection()
+    if not conn:
+        return []
+    cursor = conn.cursor(dictionary=True)
+    cursor.execute("""
+        SELECT endpoint, p256dh, auth
+        FROM push_subscriptions
+        WHERE user_id = %s
+    """, (user_id,))
+    subs = cursor.fetchall()
+    cursor.close()
+    conn.close()
+    return subs
+
+def upsert_push_subscription(user_id, subscription, user_agent=None):
+    endpoint = subscription.get('endpoint')
+    keys = subscription.get('keys') or {}
+    p256dh = keys.get('p256dh')
+    auth = keys.get('auth')
+    if not endpoint or not p256dh or not auth:
+        return False
+    conn = get_db_connection()
+    if not conn:
+        return False
+    cursor = conn.cursor()
+    try:
+        cursor.execute("""
+            INSERT INTO push_subscriptions (id, user_id, endpoint, p256dh, auth, user_agent)
+            VALUES (%s, %s, %s, %s, %s, %s)
+            ON DUPLICATE KEY UPDATE
+                user_id = VALUES(user_id),
+                p256dh = VALUES(p256dh),
+                auth = VALUES(auth),
+                user_agent = VALUES(user_agent)
+        """, (str(uuid.uuid4()), user_id, endpoint, p256dh, auth, user_agent))
+        conn.commit()
+        return True
+    except mysql.connector.Error:
+        conn.rollback()
+        return False
+    finally:
+        cursor.close()
+        conn.close()
+
+def remove_push_subscription(user_id, endpoint):
+    conn = get_db_connection()
+    if not conn:
+        return False
+    cursor = conn.cursor()
+    try:
+        cursor.execute("""
+            DELETE FROM push_subscriptions
+            WHERE user_id = %s AND endpoint = %s
+        """, (user_id, endpoint))
+        conn.commit()
+        return True
+    except mysql.connector.Error:
+        conn.rollback()
+        return False
+    finally:
+        cursor.close()
+        conn.close()
+
+def send_push_to_user(user_id, payload):
+    vapid = get_vapid_config()
+    if not vapid:
+        return
+    public_key, private_key, subject = vapid
+    subscriptions = get_user_subscriptions(user_id)
+    for sub in subscriptions:
+        sub_info = {
+            "endpoint": sub['endpoint'],
+            "keys": {"p256dh": sub['p256dh'], "auth": sub['auth']}
+        }
+        try:
+            webpush(
+                subscription_info=sub_info,
+                data=json.dumps(payload),
+                vapid_private_key=private_key,
+                vapid_claims={"sub": subject}
+            )
+        except WebPushException as ex:
+            response = getattr(ex, 'response', None)
+            if response is not None and response.status_code in (404, 410):
+                remove_push_subscription(user_id, sub['endpoint'])
+
+def mark_queue_notified(queue_id, field_name):
+    if field_name not in ('notified_five_away', 'notified_called'):
+        return
+    conn = get_db_connection()
+    if not conn:
+        return
+    cursor = conn.cursor()
+    try:
+        cursor.execute(f"UPDATE queue_entries SET {field_name} = 1 WHERE id = %s", (queue_id,))
+        conn.commit()
+    except mysql.connector.Error:
+        conn.rollback()
+    finally:
+        cursor.close()
+        conn.close()
+
+def notify_queue_called(queue_id):
+    conn = get_db_connection()
+    if not conn:
+        return
+    cursor = conn.cursor(dictionary=True)
+    cursor.execute("SELECT * FROM queue_entries WHERE id = %s", (queue_id,))
+    entry = cursor.fetchone()
+    cursor.close()
+    conn.close()
+    if not entry:
+        return
+    if entry.get('notified_called'):
+        return
+    if entry.get('status') not in ('called', 'serving'):
+        return
+    service_label = entry.get('service_type', '').replace('_', ' ').title()
+    payload = {
+        "title": "Queue Called",
+        "body": f"Queue {entry.get('queue_number')} ({service_label}) is now being called.",
+        "tag": f"queueup-called-{entry.get('id')}",
+        "url": "/",
+        "vibrate": [300, 150, 300, 150, 300]
+    }
+    send_push_to_user(entry.get('user_id'), payload)
+    mark_queue_notified(entry.get('id'), 'notified_called')
+
+def notify_five_away_for_service(service_type):
+    conn = get_db_connection()
+    if not conn:
+        return
+    cursor = conn.cursor(dictionary=True)
+    try:
+        cursor.execute("""
+            SELECT * FROM queue_entries
+            WHERE status IN ('called', 'serving') AND service_type = %s
+            ORDER BY called_at ASC
+            LIMIT 1
+        """, (service_type,))
+        current = cursor.fetchone()
+        if not current:
+            return
+        current_number = parse_queue_numeric(current.get('queue_number'))
+        if current_number is None:
+            return
+        target_number = current_number + 5
+
+        cursor.execute("""
+            SELECT * FROM queue_entries
+            WHERE status = 'waiting' AND service_type = %s AND notified_five_away = 0
+        """, (service_type,))
+        waiting = cursor.fetchall()
+
+        for entry in waiting:
+            entry_number = parse_queue_numeric(entry.get('queue_number'))
+            if entry_number != target_number:
+                continue
+            service_label = entry.get('service_type', '').replace('_', ' ').title()
+            payload = {
+                "title": "Almost your turn!",
+                "body": f"Queue {entry.get('queue_number')} ({service_label}) — you're 5 away.",
+                "tag": f"queueup-five-away-{entry.get('id')}",
+                "url": "/",
+                "vibrate": [200, 100, 200, 100, 200]
+            }
+            send_push_to_user(entry.get('user_id'), payload)
+            mark_queue_notified(entry.get('id'), 'notified_five_away')
+    finally:
+        cursor.close()
+        conn.close()
+
 # Authentication routes
 @app.route('/api/auth/register', methods=['POST'])
 def register():
@@ -455,6 +668,43 @@ def get_current_user_info():
         return jsonify({'error': 'User not found'}), 404
     return jsonify(user), 200
 
+@app.route('/api/notifications/vapid-public-key', methods=['GET'])
+def get_vapid_public_key():
+    vapid = get_vapid_config()
+    if not vapid:
+        return jsonify({'error': 'Push notifications are not configured'}), 503
+    public_key, _, _ = vapid
+    return jsonify({'public_key': public_key}), 200
+
+@app.route('/api/notifications/subscribe', methods=['POST'])
+@require_auth
+def subscribe_notifications():
+    user = get_current_user()
+    if not user:
+        return jsonify({'error': 'User not found'}), 404
+    data = request.json or {}
+    subscription = data.get('subscription') or {}
+    user_agent = request.headers.get('User-Agent')
+    if not subscription:
+        return jsonify({'error': 'Subscription payload is required'}), 400
+    if not upsert_push_subscription(user['id'], subscription, user_agent):
+        return jsonify({'error': 'Failed to save subscription'}), 500
+    return jsonify({'message': 'Subscription saved'}), 200
+
+@app.route('/api/notifications/unsubscribe', methods=['POST'])
+@require_auth
+def unsubscribe_notifications():
+    user = get_current_user()
+    if not user:
+        return jsonify({'error': 'User not found'}), 404
+    data = request.json or {}
+    endpoint = data.get('endpoint')
+    if not endpoint:
+        return jsonify({'error': 'Endpoint is required'}), 400
+    if not remove_push_subscription(user['id'], endpoint):
+        return jsonify({'error': 'Failed to remove subscription'}), 500
+    return jsonify({'message': 'Subscription removed'}), 200
+
 # Queue management routes
 @app.route('/api/queue/join', methods=['POST'])
 @require_auth
@@ -558,6 +808,7 @@ def join_queue():
         cursor.close()
         conn.close()
         
+        notify_five_away_for_service(service_type)
         return jsonify(queue_entry), 201
     except mysql.connector.Error as err:
         conn.rollback()
@@ -722,6 +973,11 @@ def queue_action():
         conn.commit()
         cursor.close()
         conn.close()
+
+        if action == 'call':
+            notify_queue_called(queue_id)
+        if action in ('call', 'next', 'complete', 'no_show'):
+            notify_five_away_for_service(queue_entry['service_type'])
         
         return jsonify({'message': f'Action {action} completed successfully'}), 200
     except mysql.connector.Error as err:

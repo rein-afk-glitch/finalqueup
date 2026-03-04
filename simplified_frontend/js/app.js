@@ -30,6 +30,7 @@ let lastNotifiedQueueId = null;
 let lastCalledQueueId = null;
 let analyticsCharts = { numbersServed: null, avgServiceTime: null, peakHours: null };
 let serviceWorkerRegistration = null;
+let vapidPublicKey = null;
 
 const NOTIFICATION_ICON = 'images/university-logo.png';
 const VIBRATION_PREF_KEY = 'queueup_vibration_allowed';
@@ -287,13 +288,16 @@ function setupEventListeners() {
     // Notification permission modal action
     const enableNotificationsBtn = document.getElementById('enable-notifications-btn');
     if (enableNotificationsBtn) {
-        enableNotificationsBtn.addEventListener('click', () => {
+        enableNotificationsBtn.addEventListener('click', async () => {
             if (isNotificationDenied()) {
-                alert('Notifications are blocked. Open your browser site settings and allow notifications for this site.');
+                showNotificationPermissionModal();
                 return;
             }
-            requestNotificationPermission();
+            const permission = await requestNotificationPermission();
             requestVibrationPermission();
+            if (permission === 'granted') {
+                await ensurePushSubscription();
+            }
             renderNotificationPermissionBanner();
             const modalEl = document.getElementById('notification-permission-modal');
             const modal = modalEl ? bootstrap.Modal.getInstance(modalEl) : null;
@@ -628,6 +632,67 @@ async function ensureServiceWorker() {
     }
 }
 
+function urlBase64ToUint8Array(base64String) {
+    const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
+    const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+    const rawData = window.atob(base64);
+    const outputArray = new Uint8Array(rawData.length);
+    for (let i = 0; i < rawData.length; ++i) {
+        outputArray[i] = rawData.charCodeAt(i);
+    }
+    return outputArray;
+}
+
+async function getVapidPublicKey() {
+    if (vapidPublicKey) return vapidPublicKey;
+    try {
+        const response = await fetch(`${API_BASE}/notifications/vapid-public-key`, { credentials: 'include' });
+        if (!response.ok) return null;
+        const data = await response.json();
+        vapidPublicKey = data.public_key || null;
+        return vapidPublicKey;
+    } catch (error) {
+        console.warn('Failed to load VAPID key:', error);
+        return null;
+    }
+}
+
+async function sendPushSubscriptionToServer(subscription) {
+    try {
+        await fetch(`${API_BASE}/notifications/subscribe`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({ subscription })
+        });
+    } catch (error) {
+        console.warn('Failed to save push subscription:', error);
+    }
+}
+
+async function ensurePushSubscription() {
+    if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
+    if (Notification.permission !== 'granted') return;
+    const registration = await ensureServiceWorker();
+    if (!registration) return;
+    const existing = await registration.pushManager.getSubscription();
+    if (existing) {
+        await sendPushSubscriptionToServer(existing.toJSON());
+        return;
+    }
+    const publicKey = await getVapidPublicKey();
+    if (!publicKey) return;
+    try {
+        const subscription = await registration.pushManager.subscribe({
+            userVisibleOnly: true,
+            applicationServerKey: urlBase64ToUint8Array(publicKey)
+        });
+        await sendPushSubscriptionToServer(subscription.toJSON());
+    } catch (error) {
+        console.warn('Push subscription failed:', error);
+    }
+}
+
 function requestVibrationPermission() {
     if (!('vibrate' in navigator)) return;
     const stored = localStorage.getItem(VIBRATION_PREF_KEY);
@@ -645,8 +710,11 @@ function isVibrationEnabled() {
 
 async function initNotificationSupport() {
     await ensureServiceWorker();
-    requestNotificationPermission();
+    const permission = await requestNotificationPermission();
     requestVibrationPermission();
+    if (permission === 'granted') {
+        await ensurePushSubscription();
+    }
     renderNotificationPermissionBanner();
 }
 
@@ -672,6 +740,42 @@ function getNotificationPermission() {
 
 function isNotificationDenied() {
     return getNotificationPermission() === 'denied';
+}
+
+function getNotificationEnableSteps() {
+    const ua = navigator.userAgent || '';
+    if (/Edg/i.test(ua)) {
+        return [
+            'Open the Edge menu (⋯) and select Settings.',
+            'Go to Cookies and site permissions → Notifications.',
+            'Find this site and set notifications to Allow.'
+        ];
+    }
+    if (/Chrome/i.test(ua) || /Chromium/i.test(ua)) {
+        return [
+            'Open the Chrome menu (⋯) and select Settings.',
+            'Go to Privacy and security → Site settings → Notifications.',
+            'Find this site and set notifications to Allow.'
+        ];
+    }
+    if (/Firefox/i.test(ua)) {
+        return [
+            'Open the Firefox menu (≡) and select Settings.',
+            'Go to Privacy & Security → Permissions → Notifications.',
+            'Find this site and allow notifications.'
+        ];
+    }
+    if (/Safari/i.test(ua) && !/Chrome|Chromium|Edg/i.test(ua)) {
+        return [
+            'Open Safari Settings → Websites → Notifications.',
+            'Find this site and set it to Allow.'
+        ];
+    }
+    return [
+        'Open your browser settings.',
+        'Find site permissions or notifications.',
+        'Allow notifications for this site.'
+    ];
 }
 
 function renderNotificationPermissionBanner() {
@@ -724,11 +828,22 @@ function showNotificationPermissionModal() {
     if (permission === 'granted' || !canRequestNotifications()) return;
 
     const statusEl = modalEl.querySelector('[data-notification-status]');
+    const stepsEl = modalEl.querySelector('#notification-help-steps');
     if (statusEl) {
         if (permission === 'denied') {
-            statusEl.textContent = 'Notifications are blocked for this site. Open your browser site settings and allow notifications, then return here.';
+            statusEl.textContent = 'Notifications are blocked for this site. Follow the steps below to enable them, then return here.';
         } else {
             statusEl.textContent = 'Allow notifications so we can alert you when your queue is 5 away and when you are now serving.';
+        }
+    }
+    if (stepsEl) {
+        if (permission === 'denied') {
+            const steps = getNotificationEnableSteps();
+            stepsEl.innerHTML = steps.map(step => `<li>${step}</li>`).join('');
+            stepsEl.classList.remove('d-none');
+        } else {
+            stepsEl.innerHTML = '';
+            stepsEl.classList.add('d-none');
         }
     }
 
@@ -750,8 +865,11 @@ async function handleLogin(e) {
     const errorDiv = document.getElementById('login-error');
 
     // Request permissions in direct user gesture before async work
-    requestNotificationPermission();
+    const permission = await requestNotificationPermission();
     requestVibrationPermission();
+    if (permission === 'granted') {
+        await ensurePushSubscription();
+    }
 
     try {
         const response = await fetch(`${API_BASE}/auth/login`, {
@@ -1325,13 +1443,18 @@ async function loadAdminCompactQueue() {
 }
 
 // Request notification permission (for 5-away alert)
-function requestNotificationPermission() {
-    if ('Notification' in window && Notification.permission === 'default') {
-        if (!canRequestNotifications()) {
-            alert('Notifications require a secure (HTTPS) connection. Please open this site over HTTPS to enable alerts.');
-            return;
-        }
-        Notification.requestPermission();
+async function requestNotificationPermission() {
+    if (!('Notification' in window)) return 'unsupported';
+    if (Notification.permission !== 'default') return Notification.permission;
+    if (!canRequestNotifications()) {
+        alert('Notifications require a secure (HTTPS) connection. Please open this site over HTTPS to enable alerts.');
+        return 'denied';
+    }
+    try {
+        const result = await Notification.requestPermission();
+        return result;
+    } catch (_) {
+        return Notification.permission;
     }
 }
 
