@@ -846,7 +846,8 @@ function showNotificationPermissionModal() {
     if (enableBtn) {
         const disable = permission === 'denied' || permission === 'unsupported' || !canRequest || (permission === 'default' && hasPromptedNotifications());
         enableBtn.disabled = disable;
-        enableBtn.textContent = disable ? 'Open Browser Settings' : 'Enable Notifications';
+        enableBtn.textContent = 'Enable Notifications';
+        enableBtn.classList.toggle('d-none', disable);
     }
 
     const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
