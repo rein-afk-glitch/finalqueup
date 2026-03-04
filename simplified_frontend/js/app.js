@@ -33,7 +33,7 @@ let serviceWorkerRegistration = null;
 let vapidPublicKey = null;
 
 const NOTIFICATION_ICON = 'images/university-logo.png';
-const VIBRATION_PREF_KEY = 'queueup_vibration_allowed';
+const NOTIFICATION_PROMPT_KEY = 'queueup_notification_prompted';
 
 const SERVICE_TYPES = [
     'submission_of_application_forms',
@@ -301,15 +301,6 @@ function setupEventListeners() {
             const modalEl = document.getElementById('notification-permission-modal');
             const modal = modalEl ? bootstrap.Modal.getInstance(modalEl) : null;
             if (modal) modal.hide();
-        });
-    }
-
-    const enableVibrationBtn = document.getElementById('enable-vibration-btn');
-    if (enableVibrationBtn) {
-        enableVibrationBtn.addEventListener('click', () => {
-            requestVibrationPermission();
-            renderNotificationPermissionBanner();
-            showNotificationPermissionModal();
         });
     }
 
@@ -701,36 +692,20 @@ async function ensurePushSubscription() {
     }
 }
 
-function requestVibrationPermission() {
-    if (!('vibrate' in navigator)) return;
-    const stored = localStorage.getItem(VIBRATION_PREF_KEY);
-    if (stored === 'granted' || stored === 'denied') return;
-    const allow = confirm('Allow vibration alerts for your queue updates?');
-    localStorage.setItem(VIBRATION_PREF_KEY, allow ? 'granted' : 'denied');
-    if (allow) {
-        navigator.vibrate(20);
-    }
-}
-
-function isVibrationEnabled() {
-    return localStorage.getItem(VIBRATION_PREF_KEY) === 'granted';
-}
-
 async function initNotificationSupport() {
     await ensureServiceWorker();
-    const permission = await requestNotificationPermission();
-    if (permission === 'granted') {
+    if (getNotificationPermission() === 'granted') {
         await ensurePushSubscription();
     }
     renderNotificationPermissionBanner();
 }
 
-function needsNotificationPrompt() {
-    return 'Notification' in window && Notification.permission === 'default' && canRequestNotifications();
+function hasPromptedNotifications() {
+    return localStorage.getItem(NOTIFICATION_PROMPT_KEY) === '1';
 }
 
-function needsVibrationPrompt() {
-    return 'vibrate' in navigator && !localStorage.getItem(VIBRATION_PREF_KEY);
+function needsNotificationPrompt() {
+    return 'Notification' in window && Notification.permission === 'default' && !hasPromptedNotifications() && canRequestNotifications();
 }
 
 function canRequestNotifications() {
@@ -792,7 +767,8 @@ function renderNotificationPermissionBanner() {
     const existing = document.getElementById('notification-permission-alert');
     const permission = getNotificationPermission();
     const unsupported = permission === 'unsupported';
-    const shouldShow = needsNotificationPrompt() || needsVibrationPrompt() || isNotificationDenied() || unsupported;
+    const dismissed = permission === 'default' && hasPromptedNotifications();
+    const shouldShow = needsNotificationPrompt() || isNotificationDenied() || unsupported || dismissed;
 
     if (!shouldShow) {
         if (existing) existing.remove();
@@ -809,8 +785,10 @@ function renderNotificationPermissionBanner() {
         ? 'Notifications are not supported on this browser. Use a supported browser or install this site as an app where available.'
         : (denied
             ? 'Notifications are blocked for this site. Enable them in your browser settings.'
-            : 'Enable alerts to get queue notifications and vibration updates.');
-    const buttonLabel = (denied || unsupported) ? 'How to enable' : 'Enable';
+            : dismissed
+                ? 'You dismissed the prompt. Enable notifications in your browser site settings.'
+                : 'Enable alerts to get queue notifications and vibration updates.');
+    const buttonLabel = (denied || unsupported || dismissed) ? 'How to enable' : 'Enable';
     alert.innerHTML = `
         <div>
             <strong>Enable alerts</strong> ${message}
@@ -837,12 +815,10 @@ function showNotificationPermissionModal() {
     if (!modalEl) return;
     const permission = getNotificationPermission();
     const canRequest = canRequestNotifications();
-    const needsVibration = needsVibrationPrompt();
-    if (permission === 'granted' && !needsVibration) return;
+    if (permission === 'granted') return;
 
     const statusEl = modalEl.querySelector('[data-notification-status]');
     const stepsEl = modalEl.querySelector('#notification-help-steps');
-    const vibrationBlock = modalEl.querySelector('#vibration-permission-block');
     if (statusEl) {
         if (permission === 'unsupported') {
             statusEl.textContent = 'Notifications are not supported in this browser. On iOS, install this site as a web app and enable notifications in iOS Settings.';
@@ -850,12 +826,14 @@ function showNotificationPermissionModal() {
             statusEl.textContent = 'Notifications require a secure (HTTPS) connection. Open this site over HTTPS to enable alerts.';
         } else if (permission === 'denied') {
             statusEl.textContent = 'Notifications are blocked for this site. Follow the steps below to enable them, then return here.';
+        } else if (permission === 'default' && hasPromptedNotifications()) {
+            statusEl.textContent = 'You dismissed the notification prompt. Open your browser site settings and allow notifications, then return here.';
         } else {
             statusEl.textContent = 'Allow notifications so we can alert you when your queue is 5 away and when you are now serving.';
         }
     }
     if (stepsEl) {
-        if (permission === 'denied') {
+        if (permission === 'denied' || (permission === 'default' && hasPromptedNotifications())) {
             const steps = getNotificationEnableSteps();
             stepsEl.innerHTML = steps.map(step => `<li>${step}</li>`).join('');
             stepsEl.classList.remove('d-none');
@@ -864,13 +842,9 @@ function showNotificationPermissionModal() {
             stepsEl.classList.add('d-none');
         }
     }
-    if (vibrationBlock) {
-        vibrationBlock.classList.toggle('d-none', !needsVibration);
-    }
-
     const enableBtn = modalEl.querySelector('#enable-notifications-btn');
     if (enableBtn) {
-        const disable = permission === 'denied' || permission === 'unsupported' || !canRequest;
+        const disable = permission === 'denied' || permission === 'unsupported' || !canRequest || (permission === 'default' && hasPromptedNotifications());
         enableBtn.disabled = disable;
         enableBtn.textContent = disable ? 'Open Browser Settings' : 'Enable Notifications';
     }
@@ -1467,10 +1441,12 @@ async function loadAdminCompactQueue() {
 async function requestNotificationPermission() {
     if (!('Notification' in window)) return 'unsupported';
     if (Notification.permission !== 'default') return Notification.permission;
+    if (hasPromptedNotifications()) return Notification.permission;
     if (!canRequestNotifications()) {
         alert('Notifications require a secure (HTTPS) connection. Please open this site over HTTPS to enable alerts.');
         return 'denied';
     }
+    localStorage.setItem(NOTIFICATION_PROMPT_KEY, '1');
     try {
         const result = await Notification.requestPermission();
         return result;
@@ -1550,7 +1526,7 @@ function triggerPositionNotification(queueNumber, serviceLabel, count) {
 
     showQueueNotification(title, body, `queueup-${queueNumber}-away-${count}`);
 
-    if (navigator.vibrate && isVibrationEnabled()) {
+    if (navigator.vibrate) {
         navigator.vibrate([200, 100, 200, 100, 200]);
     }
 
@@ -1688,7 +1664,7 @@ function triggerQueueCalledAlert(queue) {
     const message = `Queue ${queue.queue_number} (${label}) ${statusText}`;
     let vibrated = false;
 
-    if (navigator.vibrate && isVibrationEnabled()) {
+    if (navigator.vibrate) {
         vibrated = navigator.vibrate([300, 150, 300, 150, 300]);
     }
 
