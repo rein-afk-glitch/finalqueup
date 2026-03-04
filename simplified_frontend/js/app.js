@@ -724,6 +724,23 @@ function isNotificationDenied() {
     return getNotificationPermission() === 'denied';
 }
 
+function isIOSDevice() {
+    return /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+}
+
+function isStandalonePwa() {
+    return window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+}
+
+function getIosPwaInstallSteps() {
+    return [
+        'Open this site in Safari.',
+        'Tap the Share button.',
+        'Select "Add to Home Screen".',
+        'Open the app from your Home Screen and allow notifications.'
+    ];
+}
+
 function getNotificationEnableSteps() {
     const ua = navigator.userAgent || '';
     if (/Edg/i.test(ua)) {
@@ -782,7 +799,9 @@ function renderNotificationPermissionBanner() {
     alert.className = 'alert alert-warning d-flex align-items-center justify-content-between gap-3';
     const denied = isNotificationDenied();
     const message = unsupported
-        ? 'Notifications are not supported on this browser. Use a supported browser or install this site as an app where available.'
+        ? (isIOSDevice() && !isStandalonePwa()
+            ? 'Notifications on iOS work only after installing this site as a Home Screen app.'
+            : 'Notifications are not supported on this browser. Use a supported browser or install this site as an app where available.')
         : (denied
             ? 'Notifications are blocked for this site. Enable them in your browser settings.'
             : dismissed
@@ -821,7 +840,11 @@ function showNotificationPermissionModal() {
     const stepsEl = modalEl.querySelector('#notification-help-steps');
     if (statusEl) {
         if (permission === 'unsupported') {
-            statusEl.textContent = 'Notifications are not supported in this browser. On iOS, install this site as a web app and enable notifications in iOS Settings.';
+            if (isIOSDevice() && !isStandalonePwa()) {
+                statusEl.textContent = 'Notifications work on iOS only after installing this site as a Home Screen app. Follow the steps below.';
+            } else {
+                statusEl.textContent = 'Notifications are not supported in this browser. Use a supported browser or install this site as an app where available.';
+            }
         } else if (!canRequest) {
             statusEl.textContent = 'Notifications require a secure (HTTPS) connection. Open this site over HTTPS to enable alerts.';
         } else if (permission === 'denied') {
@@ -833,7 +856,11 @@ function showNotificationPermissionModal() {
         }
     }
     if (stepsEl) {
-        if (permission === 'denied' || (permission === 'default' && hasPromptedNotifications())) {
+        if (permission === 'unsupported' && isIOSDevice() && !isStandalonePwa()) {
+            const steps = getIosPwaInstallSteps();
+            stepsEl.innerHTML = steps.map(step => `<li>${step}</li>`).join('');
+            stepsEl.classList.remove('d-none');
+        } else if (permission === 'denied' || (permission === 'default' && hasPromptedNotifications())) {
             const steps = getNotificationEnableSteps();
             stepsEl.innerHTML = steps.map(step => `<li>${step}</li>`).join('');
             stepsEl.classList.remove('d-none');
