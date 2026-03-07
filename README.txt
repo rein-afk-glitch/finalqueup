@@ -1,7 +1,7 @@
-QUEUEUP - RUN LOCALLY ON WINDOWS (FOR COLLEAGUES)
+QUEUP - RUN LOCALLY ON WINDOWS (FOR COLLEAGUES)
 =================================================
 
-This guide is for running the QueueUp system on a Windows PC.
+This guide is for running the QUEUP system on a Windows PC.
 
 What you will run:
 - Backend (Flask/Python) on: http://localhost:5001
@@ -28,14 +28,14 @@ B) Install Python 3.10+ (recommended)
 Option A (phpMyAdmin):
 1. Open: http://localhost/phpmyadmin
 2. Click "New" on the left sidebar
-3. Database name: queueup_db
+3. Database name: queup_db
 4. Collation: utf8mb4_general_ci
 5. Click "Create"
 
 Option B (Command line):
 1. Open Command Prompt or XAMPP Shell.
 2. Run:
-   mysql -u root -e "CREATE DATABASE IF NOT EXISTS queueup_db;"
+   mysql -u root -e "CREATE DATABASE IF NOT EXISTS queup_db;"
 
 NOTE: On many XAMPP installs, MySQL root password is empty by default.
 
@@ -79,7 +79,7 @@ Or create manually and paste this:
 DB_HOST=localhost
 DB_USER=root
 DB_PASSWORD=
-DB_NAME=queueup_db
+DB_NAME=queup_db
 
 GOOGLE_API_KEY=
 
@@ -140,7 +140,7 @@ B) Port already in use (5001 or 8080)
 
 C) Database connection error
    - Ensure XAMPP MySQL is started (check XAMPP Control Panel).
-   - Ensure database exists: queueup_db (see step 2).
+   - Ensure database exists: queup_db (see step 2).
    - Ensure .env file is correct (DB_HOST/USER/PASSWORD/DB_NAME).
 
 D) Python venv activation fails (PowerShell)
@@ -162,11 +162,11 @@ After first run, register an account on the login page.
 
 For admin access, you need to manually set admin status in the database:
 1. Open phpMyAdmin: http://localhost/phpmyadmin
-2. Go to database: queueup_db
+2. Go to database: queup_db
 3. Go to table: users
 4. Find your user, click "Edit"
 5. Set is_admin = 1
 6. Click "Go"
 
 
-Done! Enjoy using QueueUp.
+Done! Enjoy using QUEUP.

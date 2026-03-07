@@ -99,8 +99,8 @@ db_config = {
     'user': os.getenv('DB_USER', 'root'),
     'password': os.getenv('DB_PASSWORD', ''),
     'host': os.getenv('DB_HOST', 'localhost'),
-    'database': os.getenv('DB_NAME', 'queueup_db'),
-    'pool_name': 'queueup_pool',
+    'database': os.getenv('DB_NAME', 'queup_db'),
+    'pool_name': 'queup_pool',
     'pool_size': 5
 }
 
@@ -380,7 +380,7 @@ def get_current_user():
 def get_vapid_config():
     public_key = os.getenv('VAPID_PUBLIC_KEY')
     private_key = os.getenv('VAPID_PRIVATE_KEY')
-    subject = os.getenv('VAPID_SUBJECT', 'mailto:queueup@example.com')
+    subject = os.getenv('VAPID_SUBJECT', 'mailto:queup@example.com')
     if not public_key or not private_key:
         return None
     return public_key, private_key, subject
@@ -513,7 +513,7 @@ def notify_queue_called(queue_id):
     payload = {
         "title": "Queue Called",
         "body": f"Queue {entry.get('queue_number')} ({service_label}) is now being called.",
-        "tag": f"queueup-called-{entry.get('id')}",
+        "tag": f"queup-called-{entry.get('id')}",
         "url": "/",
         "vibrate": [300, 150, 300, 150, 300]
     }
@@ -554,7 +554,7 @@ def notify_five_away_for_service(service_type):
             payload = {
                 "title": "Almost your turn!",
                 "body": f"Queue {entry.get('queue_number')} ({service_label}) — you're 5 away.",
-                "tag": f"queueup-five-away-{entry.get('id')}",
+                "tag": f"queup-five-away-{entry.get('id')}",
                 "url": "/",
                 "vibrate": [200, 100, 200, 100, 200]
             }
@@ -1130,6 +1130,9 @@ Determine if this is a valid receipt for the University of San Agustin accountin
                     files={'file': (file.filename, image_data, file.content_type)},
                     timeout=30 # Increased timeout for n8n processing
                 )
+                
+                print(f"n8n Response Status: {n8n_response.status_code}")
+                print(f"n8n Response Body: {n8n_response.text}")
                 
                 if n8n_response.status_code == 200:
                     n8n_data = n8n_response.json()

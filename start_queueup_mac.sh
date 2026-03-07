@@ -1,6 +1,6 @@
 #!/bin/zsh
 
-# QueueUp - macOS start script
+# QUEUP - macOS start script
 # -----------------------------
 # This script starts:
 # - Backend (Flask) on http://localhost:5001
@@ -12,7 +12,7 @@
 #
 # Requirements:
 # - Python 3.10+ installed and available as `python3`
-# - MySQL running via XAMPP (database: queueup_db)
+# - MySQL running via XAMPP (database: queup_db)
 
 set -e
 
@@ -20,7 +20,7 @@ ROOT_DIR="$(cd "$(dirname "$0")" && pwd)"
 BACKEND_DIR="$ROOT_DIR/simplified_backend"
 FRONTEND_DIR="$ROOT_DIR/simplified_frontend"
 
-echo "== QueueUp macOS starter =="
+echo "== QUEUP macOS starter =="
 echo "Project root: $ROOT_DIR"
 
 if ! command -v python3 >/dev/null 2>&1; then
@@ -54,7 +54,7 @@ echo ""
 echo "Backend PID:  $BACKEND_PID"
 echo "Frontend PID: $FRONTEND_PID"
 echo ""
-echo "Open http://localhost:8080 in your browser to use QueueUp."
+echo "Open http://localhost:8080 in your browser to use QUEUP."
 echo ""
 echo "To stop both servers, press Ctrl+C in this terminal."
 

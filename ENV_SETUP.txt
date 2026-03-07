@@ -4,7 +4,7 @@ COPY THIS CONTENT TO: simplified_backend\.env
 DB_HOST=localhost
 DB_USER=root
 DB_PASSWORD=
-DB_NAME=queueup_db
+DB_NAME=queup_db
 
 GOOGLE_API_KEY=
 

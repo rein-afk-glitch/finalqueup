@@ -33,7 +33,7 @@ let serviceWorkerRegistration = null;
 let vapidPublicKey = null;
 
 const NOTIFICATION_ICON = 'images/university-logo.png';
-const NOTIFICATION_PROMPT_KEY = 'queueup_notification_prompted';
+const NOTIFICATION_PROMPT_KEY = 'queup_notification_prompted';
 
 const SERVICE_TYPES = [
     'submission_of_application_forms',
@@ -1561,7 +1561,7 @@ function triggerPositionNotification(queueNumber, serviceLabel, count) {
     const title = 'Almost your turn!';
     const body = `Queue ${queueNumber} (${serviceLabel}) — you're ${count} away. Get ready!`;
 
-    showQueueNotification(title, body, `queueup-${queueNumber}-away-${count}`);
+    showQueueNotification(title, body, `queup-${queueNumber}-away-${count}`);
 
     if (navigator.vibrate) {
         navigator.vibrate([200, 100, 200, 100, 200]);
@@ -1715,7 +1715,7 @@ function triggerQueueCalledAlert(queue) {
     showQueueCalledInAppAlert(message);
 
     const notificationTitle = queue.status === 'called' ? 'Queue Called' : 'Now Serving';
-    showQueueNotification(notificationTitle, message, `queueup-now-serving-${queue.id || queue.queue_number}`);
+    showQueueNotification(notificationTitle, message, `queup-now-serving-${queue.id || queue.queue_number}`);
 }
 
 function playQueueCallBeep() {
@@ -1894,7 +1894,7 @@ function displayStudentHistory(history) {
                 <td>${formatServiceLabel(trans.service_type)}</td>
                 <td><span class="badge bg-success">${trans.status}</span></td>
                 <td>${trans.wait_time_minutes ? trans.wait_time_minutes + ' min' : '-'}</td>
-                <td>${trans.completed_at ? new Date(trans.completed_at).toLocaleString() : '-'}</td>
+                <td>${trans.completed_at ? (function (d) { try { let date = new Date(d); if (isNaN(date.getTime())) { date = new Date(d.replace(' ', 'T')); } return date.toLocaleString(); } catch (e) { return d; } })(trans.completed_at) : '-'}</td>
             </tr>
         `;
     }).join('');
