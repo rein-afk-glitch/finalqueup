@@ -177,11 +177,11 @@ function hideDashboardLoadingOverlay(delay = 400) {
 }
 
 // Show dashboard based on role
-function showDashboard(role) {
+function showDashboard(role, pushToHistory = true) {
     showDashboardLoadingOverlay();
 
     const targetId = role === 'admin' ? 'admin-dashboard' : 'student-dashboard';
-    showPage(targetId);
+    showPage(targetId, pushToHistory);
 
     const dashboardEl = document.getElementById(targetId);
     if (dashboardEl) {
@@ -562,7 +562,7 @@ function setupEventListeners() {
 }
 
 // Navigation
-function showPage(pageId) {
+function showPage(pageId, pushToHistory = true) {
     const pages = ['landing-page', 'login-page', 'admin-dashboard', 'student-dashboard'];
     pages.forEach(id => {
         const el = document.getElementById(id);
@@ -585,6 +585,11 @@ function showPage(pageId) {
         }
     });
 
+    // Handle history push
+    if (pushToHistory) {
+        window.history.pushState({ pageId: pageId }, "", pageId === 'landing-page' ? " " : "#" + pageId);
+    }
+
     // Stop any active polling intervals when navigating away
     if (pageId !== 'admin-dashboard' && pageId !== 'student-dashboard') {
         if (statsPollInterval) { clearInterval(statsPollInterval); statsPollInterval = null; }
@@ -593,6 +598,16 @@ function showPage(pageId) {
     }
 }
 
+// Handle browser back/forward buttons
+window.addEventListener('popstate', function (event) {
+    if (event.state && event.state.pageId) {
+        showPage(event.state.pageId, false);
+    } else {
+        // Default to landing page if no state
+        showPage('landing-page', false);
+    }
+});
+
 document.getElementById('nav-start-btn')?.addEventListener('click', () => showPage('login-page'));
 document.getElementById('start-btn')?.addEventListener('click', () => showPage('login-page'));
 document.getElementById('nav-signin-btn')?.addEventListener('click', () => showPage('login-page'));
@@ -600,21 +615,36 @@ document.getElementById('login-back-btn')?.addEventListener('click', () => showP
 
 // Initial page check
 async function initApp() {
+    // Check if we have a session marker for THIS tab
+    const hasActiveSession = sessionStorage.getItem('queup_session_active');
+
     try {
         const response = await fetch(`${API_BASE}/auth/me`, {
             credentials: 'include'
         });
 
-        if (response.ok) {
+        if (response.ok && hasActiveSession) {
             const user = await response.json();
             currentUser = user;
-            showDashboard(user.role);
+            // Set initial history state for the dashboard
+            const pageId = user.role === 'admin' ? 'admin-dashboard' : 'student-dashboard';
+            window.history.replaceState({ pageId: pageId }, "", "#" + pageId);
+            showDashboard(user.role, false);
         } else {
-            showPage('landing-page');
+            // Set initial history state for landing page
+            window.history.replaceState({ pageId: 'landing-page' }, "", " ");
+            showPage('landing-page', false);
+
+            // If they have a cookie but no session marker (new tab), 
+            // we don't automatically show the dashboard - they must sign in again
+            if (response.ok && !hasActiveSession) {
+                console.log('New tab detected with existing session. Authentication required for this tab.');
+            }
         }
     } catch (error) {
         console.error('Auth check failed:', error);
-        showPage('landing-page');
+        window.history.replaceState({ pageId: 'landing-page' }, "", " ");
+        showPage('landing-page', false);
     }
 }
 
@@ -907,6 +937,9 @@ async function handleLogin(e) {
         const data = await response.json();
 
         if (response.ok) {
+            // Set session marker for this tab to ensure new tabs require re-login
+            sessionStorage.setItem('queup_session_active', 'true');
+
             currentUser = data;
             showDashboard(data.role);
             errorDiv.classList.add('d-none');
@@ -962,6 +995,9 @@ async function handleRegister(e) {
 
 // Logout
 async function logout() {
+    // Clear session marker for this tab
+    sessionStorage.removeItem('queup_session_active');
+
     try {
         await fetch(`${API_BASE}/auth/logout`, {
             method: 'POST',
