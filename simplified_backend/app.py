@@ -391,6 +391,31 @@ def parse_queue_numeric(queue_number):
     match = re.search(r'(\d+)$', str(queue_number))
     return int(match.group(1)) if match else None
 
+def mix_priority_waiting(waiting_entries):
+    regular = [entry for entry in waiting_entries if entry.get('priority') != 'senior_pwd']
+    senior = [entry for entry in waiting_entries if entry.get('priority') == 'senior_pwd']
+    mixed = []
+    reg_idx = 0
+    sen_idx = 0
+
+    while reg_idx < len(regular) or sen_idx < len(senior):
+        for _ in range(3):
+            if reg_idx < len(regular):
+                mixed.append(regular[reg_idx])
+                reg_idx += 1
+        if sen_idx < len(senior):
+            mixed.append(senior[sen_idx])
+            sen_idx += 1
+        if reg_idx >= len(regular) and sen_idx < len(senior):
+            mixed.extend(senior[sen_idx:])
+            break
+    return mixed
+
+def order_queue_entries(entries):
+    waiting = [entry for entry in entries if entry.get('status') == 'waiting']
+    active = [entry for entry in entries if entry.get('status') != 'waiting']
+    return active + mix_priority_waiting(waiting)
+
 def get_user_subscriptions(user_id):
     conn = get_db_connection()
     if not conn:
@@ -535,31 +560,29 @@ def notify_five_away_for_service(service_type):
         current = cursor.fetchone()
         if not current:
             return
-        current_number = parse_queue_numeric(current.get('queue_number'))
-        if current_number is None:
-            return
-        target_number = current_number + 5
-
         cursor.execute("""
             SELECT * FROM queue_entries
-            WHERE status = 'waiting' AND service_type = %s AND notified_five_away = 0
+            WHERE status = 'waiting' AND service_type = %s
+            ORDER BY created_at ASC
         """, (service_type,))
         waiting = cursor.fetchall()
+        mixed_waiting = mix_priority_waiting(waiting)
+        if len(mixed_waiting) < 5:
+            return
 
-        for entry in waiting:
-            entry_number = parse_queue_numeric(entry.get('queue_number'))
-            if entry_number != target_number:
-                continue
-            service_label = entry.get('service_type', '').replace('_', ' ').title()
-            payload = {
-                "title": "Almost your turn!",
-                "body": f"Queue {entry.get('queue_number')} ({service_label}) — you're 5 away.",
-                "tag": f"queup-five-away-{entry.get('id')}",
-                "url": "/",
-                "vibrate": [200, 100, 200, 100, 200]
-            }
-            send_push_to_user(entry.get('user_id'), payload)
-            mark_queue_notified(entry.get('id'), 'notified_five_away')
+        target_entry = mixed_waiting[4]
+        if target_entry.get('notified_five_away'):
+            return
+        service_label = target_entry.get('service_type', '').replace('_', ' ').title()
+        payload = {
+            "title": "Almost your turn!",
+            "body": f"Queue {target_entry.get('queue_number')} ({service_label}) — you're 5 away.",
+            "tag": f"queup-five-away-{target_entry.get('id')}",
+            "url": "/",
+            "vibrate": [200, 100, 200, 100, 200]
+        }
+        send_push_to_user(target_entry.get('user_id'), payload)
+        mark_queue_notified(target_entry.get('id'), 'notified_five_away')
     finally:
         cursor.close()
         conn.close()
@@ -848,8 +871,20 @@ def get_queue_status():
         entries = cursor.fetchall()
         cursor.close()
         conn.close()
-        
-        return jsonify(entries), 200
+
+        if service_type:
+            ordered = order_queue_entries(entries)
+        else:
+            grouped = {}
+            for entry in entries:
+                grouped.setdefault(entry.get('service_type'), []).append(entry)
+            ordered = []
+            for svc in SERVICE_TYPES:
+                if svc in grouped:
+                    ordered.extend(order_queue_entries(grouped.pop(svc)))
+            for svc_entries in grouped.values():
+                ordered.extend(order_queue_entries(svc_entries))
+        return jsonify(ordered), 200
     except mysql.connector.Error as err:
         cursor.close()
         conn.close()
@@ -1189,6 +1224,32 @@ Determine if this is a valid receipt for the University of San Agustin accountin
             (id, user_id, document_type, verification_result, confidence_score, extracted_data)
             VALUES (%s, %s, %s, %s, %s, %s)
         """, (verification_id, user['id'], 'payment_receipt', response_text, confidence_score, extracted_data))
+
+        history_status = 'verified' if verification_status == 'VERIFIED' else 'not_verified'
+        history_queue_number = reference_number or f'AI-{verification_id[:8]}'
+        history_notes = (
+            f"Receipt verification ({verification_status}). Ref: {reference_number}, "
+            f"Account: {account_number}, Method: {payment_method}, "
+            f"Amount: {payment_amount}, Date: {payment_date}"
+        )
+        cursor.execute("""
+            INSERT INTO transaction_history
+            (id, user_id, user_name, service_type, queue_number, priority, status, wait_time_minutes,
+             service_time_minutes, served_by, notes, completed_at)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
+        """, (
+            str(uuid.uuid4()),
+            user['id'],
+            user['name'],
+            'receipt_verification',
+            history_queue_number,
+            'regular',
+            history_status,
+            None,
+            None,
+            'AI Verification',
+            history_notes
+        ))
         
         conn.commit()
         cursor.close()

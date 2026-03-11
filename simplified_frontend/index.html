@@ -758,10 +758,6 @@
         <nav class="navbar navbar-dark navbar-student">
             <div class="container-fluid">
                 <div class="d-flex align-items-center">
-                    <button class="btn btn-link text-white border-0 me-2 d-md-none" type="button"
-                        data-bs-toggle="offcanvas" data-bs-target="#studentSidebar" aria-controls="studentSidebar">
-                        <i class="bi bi-list fs-3"></i>
-                    </button>
                     <span class="navbar-brand mb-0 h1">
                         <i class="bi bi-person-circle"></i>
                         <span id="student-navbar-title">Student</span>
@@ -773,36 +769,6 @@
                 </div>
             </div>
         </nav>
-
-        <!-- Student Sidebar (Offcanvas) -->
-        <div class="offcanvas offcanvas-start" tabindex="-1" id="studentSidebar" aria-labelledby="studentSidebarLabel">
-            <div class="offcanvas-header bg-usa-red text-white">
-                <h5 class="offcanvas-title" id="studentSidebarLabel">
-                    <i class="bi bi-person-circle me-2"></i>Dashboard Menu
-                </h5>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="offcanvas"
-                    aria-label="Close"></button>
-            </div>
-            <div class="offcanvas-body p-0">
-                <div class="list-group list-group-flush sidebar-nav" role="tablist">
-                    <button class="list-group-item list-group-item-action active" data-bs-toggle="tab"
-                        data-bs-target="#join-queue-panel" type="button">
-                        <i class="bi bi-plus-circle me-3"></i>Join Queue &amp; Now Serving
-                    </button>
-                    <button class="list-group-item list-group-item-action" data-bs-toggle="tab"
-                        data-bs-target="#verification-panel" type="button">
-                        <i class="bi bi-patch-check me-3"></i>Receipt Verification
-                    </button>
-                    <button class="list-group-item list-group-item-action" data-bs-toggle="tab"
-                        data-bs-target="#student-history-panel" type="button">
-                        <i class="bi bi-clock-history me-3"></i>My History
-                    </button>
-                    <button class="list-group-item list-group-item-action text-danger mt-auto" onclick="logout()">
-                        <i class="bi bi-box-arrow-right me-3"></i>Logout
-                    </button>
-                </div>
-            </div>
-        </div>
 
         <div class="container-fluid mt-4">
             <ul class="nav nav-tabs" id="student-tabs" role="tablist">
@@ -1219,6 +1185,44 @@
                 <span class="visually-hidden">Loading...</span>
             </div>
             <div class="dashboard-loading-text">Preparing your dashboard...</div>
+        </div>
+    </div>
+
+    <!-- Initial Permissions Modal (Users Only) -->
+    <div class="modal fade" id="initial-permissions-modal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Enable Alerts</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="mb-3">Choose which alerts you want to enable for queue updates.</p>
+                    <div class="form-check form-switch">
+                        <input class="form-check-input" type="checkbox" id="initial-permission-notifications">
+                        <label class="form-check-label" for="initial-permission-notifications">
+                            Enable notifications
+                        </label>
+                        <div class="form-text" id="initial-notification-help"></div>
+                    </div>
+                    <div class="form-check form-switch mt-3">
+                        <input class="form-check-input" type="checkbox" id="initial-permission-vibration">
+                        <label class="form-check-label" for="initial-permission-vibration">
+                            Enable vibration alerts
+                        </label>
+                        <div class="form-text" id="initial-vibration-help"></div>
+                    </div>
+                    <p class="text-muted small mt-3 mb-0">
+                        You can change these later in your browser or device settings.
+                    </p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal"
+                        id="initial-permissions-dismiss-btn">Not now</button>
+                    <button type="button" class="btn btn-primary" id="save-initial-permissions-btn">Save
+                        Preferences</button>
+                </div>
+            </div>
         </div>
     </div>
 
