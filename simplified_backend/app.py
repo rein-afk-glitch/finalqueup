@@ -96,10 +96,10 @@ if os.getenv('GOOGLE_API_KEY'):
 
 # Database connection pool
 db_config = {
-    'user': os.getenv('DB_USER', 'root'),
-    'password': os.getenv('DB_PASSWORD', ''),
-    'host': os.getenv('DB_HOST', 'localhost'),
-    'database': os.getenv('DB_NAME', 'queup_db'),
+    'user': os.getenv('DB_USER') or os.getenv('MYSQLUSER', 'root'),
+    'password': os.getenv('DB_PASSWORD') or os.getenv('MYSQLPASSWORD', ''),
+    'host': os.getenv('DB_HOST') or os.getenv('MYSQLHOST', 'localhost'),
+    'database': os.getenv('DB_NAME') or os.getenv('MYSQLDATABASE', 'queup_db'),
     'pool_name': 'queup_pool',
     'pool_size': 5
 }
