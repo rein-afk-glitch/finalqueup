@@ -1726,13 +1726,13 @@ def serve_frontend():
 def serve_static(path):
     return send_from_directory('../simplified_frontend', path)
 
-if __name__ == '__main__':
-    with app.app_context():
-        init_db()
-        ensure_static_admin()
-        
-    os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
+with app.app_context():
+    init_db()
+    ensure_static_admin()
+    
+os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
+if __name__ == '__main__':
     port = int(os.environ.get("PORT", 5000))
     app.run(host='0.0.0.0', port=port)
 

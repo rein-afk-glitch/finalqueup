@@ -1046,7 +1046,7 @@ async function logout() {
     }
 
     currentUser = null;
-    showLogin();
+    window.history.replaceState({ pageId: 'landing-page' }, '', ' '); showPage('landing-page', false);
 }
 
 // Load admin dashboard
