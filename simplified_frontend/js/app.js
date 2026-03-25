@@ -1275,6 +1275,9 @@ async function loadHistory() {
         if (response.ok) {
             const history = await response.json();
             displayHistory(history);
+        } else {
+            const data = await response.json();
+            showSystemAlert('History Error: ' + (data.error || 'Server error'), 'danger');
         }
     } catch (error) {
         console.error('Failed to load history:', error);
