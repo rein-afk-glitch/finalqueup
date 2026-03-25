@@ -549,7 +549,7 @@ function setupEventListeners() {
                 const selectEl = document.getElementById(`compact-waiting-${service}`);
                 const queueId = selectEl ? selectEl.value : '';
                 if (!queueId) {
-                    alert('Select a queue number to call.');
+                    showSystemAlert('Select a queue number to call.', 'danger');
                     return;
                 }
                 queueAction(queueId, 'call').then(loadAdminCompactQueue);
@@ -557,7 +557,7 @@ function setupEventListeners() {
             if (action === 'next') {
                 const queueId = compactActionBtn.dataset.queueId;
                 if (!queueId) {
-                    alert('No called queue to advance.');
+                    showSystemAlert('No called queue to advance.', 'danger');
                     return;
                 }
                 queueAction(queueId, 'next').then(loadAdminCompactQueue);
@@ -986,7 +986,7 @@ async function handleRegister(e) {
             // Close modal and show success
             const modal = bootstrap.Modal.getInstance(document.getElementById('registerModal'));
             modal.hide();
-            alert('Registration successful! Please login.');
+            showSystemAlert('Registration successful! Please login.', 'success');
             document.getElementById('register-form').reset();
         } else {
             errorDiv.textContent = data.error || 'Registration failed';
@@ -1225,10 +1225,10 @@ async function queueAction(queueId, action) {
             loadHistory();
         } else {
             const data = await response.json();
-            alert(data.error || 'Action failed');
+            showSystemAlert(data.error || 'Action failed', 'danger');
         }
     } catch (error) {
-        alert('Connection error. Please try again.');
+        showSystemAlert('Connection error. Please try again.', 'danger');
     }
 }
 
@@ -1512,7 +1512,7 @@ async function requestNotificationPermission() {
     if (Notification.permission !== 'default') return Notification.permission;
     if (hasPromptedNotifications()) return Notification.permission;
     if (!canRequestNotifications()) {
-        alert('Notifications require a secure (HTTPS) connection. Please open this site over HTTPS to enable alerts.');
+        showSystemAlert('Notifications require a secure (HTTPS) connection. Please open this site over HTTPS to enable alerts.', 'danger');
         return 'denied';
     }
     localStorage.setItem(NOTIFICATION_PROMPT_KEY, '1');
@@ -1704,6 +1704,8 @@ async function loadMyQueue() {
 function displayMyQueue(queue) {
     const statusDiv = document.getElementById('my-queue-status');
     updateNowServingVisibility(queue);
+    updateQueueControls(queue);
+
 
     if (!queue) {
         if (statusDiv) statusDiv.innerHTML = '<div class="alert alert-info">No active queue</div>';
@@ -1803,7 +1805,7 @@ async function handleJoinQueue(e) {
     const priority = document.getElementById('priority').value;
 
     if (!serviceType) {
-        alert('Please select a service');
+        showSystemAlert('Please select a service', 'danger');
         return;
     }
 
@@ -1841,10 +1843,10 @@ async function handleJoinQueue(e) {
                 loadMyQueue();
             }, 1000);
         } else {
-            alert(data.error || 'Failed to join queue');
+            showSystemAlert(data.error || 'Failed to join queue', 'danger');
         }
     } catch (error) {
-        alert('Connection error. Please try again.');
+        showSystemAlert('Connection error. Please try again.', 'danger');
     }
 }
 
@@ -1860,7 +1862,7 @@ async function handleVerification(e) {
     const resultDiv = document.getElementById('verification-result');
 
     if (!fileInput.files[0]) {
-        alert('Please select a file');
+        showSystemAlert('Please select a file', 'danger');
         return;
     }
 
@@ -1984,13 +1986,13 @@ async function handleCreateAdmin(e) {
         });
         const data = await response.json();
         if (!response.ok) {
-            alert(data.error || 'Failed to create admin');
+            showSystemAlert(data.error || 'Failed to create admin', 'danger');
             return;
         }
         document.getElementById('create-admin-form').reset();
         await loadAdminManagement();
     } catch (error) {
-        alert('Connection error. Please try again.');
+        showSystemAlert('Connection error. Please try again.', 'danger');
     }
 }
 
@@ -2126,12 +2128,12 @@ async function updateAdminRole(adminId, adminService) {
         });
         const data = await response.json();
         if (!response.ok) {
-            alert(data.error || 'Failed to update admin role');
+            showSystemAlert(data.error || 'Failed to update admin role', 'danger');
             return;
         }
         await loadAdminList();
     } catch (error) {
-        alert('Connection error. Please try again.');
+        showSystemAlert('Connection error. Please try again.', 'danger');
     }
 }
 
@@ -2144,12 +2146,12 @@ async function deleteAdmin(adminId) {
         });
         const data = await response.json();
         if (!response.ok) {
-            alert(data.error || 'Failed to delete admin');
+            showSystemAlert(data.error || 'Failed to delete admin', 'danger');
             return;
         }
         await loadAdminList();
     } catch (error) {
-        alert('Connection error. Please try again.');
+        showSystemAlert('Connection error. Please try again.', 'danger');
     }
 }
 
@@ -2162,12 +2164,12 @@ async function deleteUser(userId) {
         });
         const data = await response.json();
         if (!response.ok) {
-            alert(data.error || 'Failed to delete user');
+            showSystemAlert(data.error || 'Failed to delete user', 'danger');
             return;
         }
         await loadUserList();
     } catch (error) {
-        alert('Connection error. Please try again.');
+        showSystemAlert('Connection error. Please try again.', 'danger');
     }
 }
 
@@ -2290,6 +2292,116 @@ async function updateServiceSetting(serviceType, updates) {
 
         loadServiceSettings();
     } catch (error) {
-        alert(error.message);
+        showSystemAlert(error.message, 'danger');
     }
+}
+
+// Update priority/service controls based on queue state
+function updateQueueControls(queue) {
+    const regularBtn = document.querySelector('.priority-btn[data-priority="regular"]');
+    const seniorBtn = document.querySelector('.priority-btn[data-priority="senior_pwd"]');
+    const serviceBtns = document.querySelectorAll('.service-btn');
+    const submitBtn = document.querySelector('#join-queue-form button[type="submit"]');
+
+    if (!regularBtn || !seniorBtn) return;
+
+    if (queue) {
+        // User is IN a queue
+        const activePriority = queue.priority || 'regular';
+        if (activePriority === 'regular') {
+            regularBtn.classList.add('active');
+            seniorBtn.disabled = true;
+            seniorBtn.style.opacity = '0.5';
+            seniorBtn.style.pointerEvents = 'none';
+        } else {
+            seniorBtn.classList.add('active');
+            regularBtn.disabled = true;
+            regularBtn.style.opacity = '0.5';
+            regularBtn.style.pointerEvents = 'none';
+        }
+        
+        serviceBtns.forEach(btn => {
+            btn.disabled = true;
+            btn.style.opacity = '0.5';
+            btn.style.pointerEvents = 'none';
+            if (btn.dataset.service === queue.service_type) {
+                btn.classList.add('active');
+            } else {
+                btn.classList.remove('active');
+            }
+        });
+
+        if (submitBtn) {
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'Already in a Queue';
+        }
+    } else {
+        // User NOT in a queue
+        regularBtn.disabled = false;
+        regularBtn.style.opacity = '1';
+        regularBtn.style.pointerEvents = 'auto';
+        regularBtn.classList.remove('active');
+
+        seniorBtn.disabled = false;
+        seniorBtn.style.opacity = '1';
+        seniorBtn.style.pointerEvents = 'auto';
+        seniorBtn.classList.remove('active');
+        
+        serviceBtns.forEach(btn => {
+            btn.disabled = false;
+            btn.style.opacity = '1';
+            btn.style.pointerEvents = 'auto';
+            btn.classList.remove('active');
+        });
+
+        if (submitBtn) {
+            submitBtn.disabled = false;
+            submitBtn.textContent = 'Join Queue';
+        }
+    }
+}
+
+// System Alert Toast Function
+function showSystemAlert(message, type = 'danger') {
+    const toastContainer = document.getElementById('system-toast-container');
+    if (!toastContainer) {
+        alert(message);
+        return;
+    }
+
+    let icon = 'bi-exclamation-circle-fill';
+    let themeClass = 'text-bg-danger';
+
+    if (type === 'success') {
+        icon = 'bi-check-circle-fill';
+        themeClass = 'text-bg-success';
+    } else if (type === 'info' || type === 'primary') {
+        icon = 'bi-info-circle-fill';
+        themeClass = 'text-bg-primary';
+    }
+
+    const toastId = 'toast-' + Date.now() + Math.floor(Math.random() * 1000);
+    const toastHTML = `
+        <div id="${toastId}" class="toast align-items-center ${themeClass} border-0 shadow-lg mb-2" role="alert" aria-live="assertive" aria-atomic="true" style="border-radius: 12px; min-width: 300px;">
+            <div class="d-flex">
+                <div class="toast-body d-flex align-items-center fw-medium" style="font-size: 1.05rem; padding: 1rem 1.25rem;">
+                    <i class="bi ${icon} me-3 fs-4"></i>
+                    <span>${message}</span>
+                </div>
+                <button type="button" class="btn-close btn-close-white me-3 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+            </div>
+        </div>
+    `;
+
+    toastContainer.insertAdjacentHTML('beforeend', toastHTML);
+    const toastEl = document.getElementById(toastId);
+    if (!toastEl) return;
+    
+    // Create and show Toast
+    const toast = new bootstrap.Toast(toastEl, { delay: 4000 });
+    toast.show();
+    
+    toastEl.addEventListener('hidden.bs.toast', () => {
+        toastEl.remove();
+    });
 }
