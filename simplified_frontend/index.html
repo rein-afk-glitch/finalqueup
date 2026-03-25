@@ -758,10 +758,6 @@
         <nav class="navbar navbar-dark navbar-student">
             <div class="container-fluid">
                 <div class="d-flex align-items-center">
-                    <button class="btn btn-link text-white border-0 me-2 d-md-none" type="button"
-                        data-bs-toggle="offcanvas" data-bs-target="#studentSidebar" aria-controls="studentSidebar">
-                        <i class="bi bi-list fs-3"></i>
-                    </button>
                     <span class="navbar-brand mb-0 h1">
                         <i class="bi bi-person-circle"></i>
                         <span id="student-navbar-title">Student</span>
@@ -774,35 +770,7 @@
             </div>
         </nav>
 
-        <!-- Student Sidebar (Offcanvas) -->
-        <div class="offcanvas offcanvas-start" tabindex="-1" id="studentSidebar" aria-labelledby="studentSidebarLabel">
-            <div class="offcanvas-header bg-usa-red text-white">
-                <h5 class="offcanvas-title" id="studentSidebarLabel">
-                    <i class="bi bi-person-circle me-2"></i>Dashboard Menu
-                </h5>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="offcanvas"
-                    aria-label="Close"></button>
-            </div>
-            <div class="offcanvas-body p-0">
-                <div class="list-group list-group-flush sidebar-nav" role="tablist">
-                    <button class="list-group-item list-group-item-action active" data-bs-toggle="tab"
-                        data-bs-target="#join-queue-panel" type="button">
-                        <i class="bi bi-plus-circle me-3"></i>Join Queue &amp; Now Serving
-                    </button>
-                    <button class="list-group-item list-group-item-action" data-bs-toggle="tab"
-                        data-bs-target="#verification-panel" type="button">
-                        <i class="bi bi-patch-check me-3"></i>Receipt Verification
-                    </button>
-                    <button class="list-group-item list-group-item-action" data-bs-toggle="tab"
-                        data-bs-target="#student-history-panel" type="button">
-                        <i class="bi bi-clock-history me-3"></i>My History
-                    </button>
-                    <button class="list-group-item list-group-item-action text-danger mt-auto" onclick="logout()">
-                        <i class="bi bi-box-arrow-right me-3"></i>Logout
-                    </button>
-                </div>
-            </div>
-        </div>
+        <!-- Student Sidebar (Offcanvas) Removed based on request -->
 
         <div class="container-fluid mt-4">
             <ul class="nav nav-tabs" id="student-tabs" role="tablist">

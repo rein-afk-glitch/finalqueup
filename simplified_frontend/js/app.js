@@ -375,6 +375,10 @@ function setupEventListeners() {
             const priorityBtn = e.target.closest('.priority-btn');
             const priority = priorityBtn.dataset.priority;
 
+            if (priority === 'senior_pwd') {
+                alert("Please present a valid Senior/PWD ID at the counter for verification.");
+            }
+
             // Remove active class from all priority buttons
             document.querySelectorAll('.priority-btn').forEach(btn => {
                 btn.classList.remove('active');
