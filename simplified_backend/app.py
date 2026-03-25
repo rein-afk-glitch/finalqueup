@@ -1221,6 +1221,7 @@ def get_transaction_history():
     cursor = conn.cursor(dictionary=True)
     
     try:
+        transactions = []
         if user['role'] == 'admin':
             if user.get('admin_type') == 'appointed':
                 if not user.get('admin_service'):
@@ -1228,32 +1229,68 @@ def get_transaction_history():
                     conn.close()
                     return jsonify({'error': 'Admin service role missing'}), 403
                 cursor.execute("""
-                    SELECT * FROM transaction_history 
+                    SELECT id, user_name, service_type, queue_number, status, wait_time_minutes, completed_at, 'queue' as type 
+                    FROM transaction_history 
                     WHERE service_type = %s
                     ORDER BY completed_at DESC LIMIT 100
                 """, (user['admin_service'],))
+                transactions = list(cursor.fetchall())
             else:
                 cursor.execute("""
-                    SELECT * FROM transaction_history 
+                    SELECT id, user_name, service_type, queue_number, status, wait_time_minutes, completed_at, 'queue' as type
+                    FROM transaction_history 
                     ORDER BY completed_at DESC LIMIT 100
                 """)
+                transactions = list(cursor.fetchall())
+                
+                cursor.execute("""
+                    SELECT dv.id, u.name as user_name, dv.document_type as service_type, 
+                           'VERIFY' as queue_number, dv.verification_result as status, 
+                           NULL as wait_time_minutes, dv.uploaded_at as completed_at, 'verification' as type
+                    FROM document_verifications dv
+                    JOIN users u ON dv.user_id = u.id
+                    ORDER BY dv.uploaded_at DESC LIMIT 100
+                """)
+                verifications = list(cursor.fetchall())
+                transactions.extend(verifications)
         else:
             cursor.execute("""
-                SELECT * FROM transaction_history 
+                SELECT id, user_name, service_type, queue_number, status, wait_time_minutes, completed_at, 'queue' as type
+                FROM transaction_history 
                 WHERE user_id = %s 
                 ORDER BY completed_at DESC LIMIT 100
             """, (user['id'],))
-        
-        transactions = cursor.fetchall()
+            transactions = list(cursor.fetchall())
+            
+            cursor.execute("""
+                SELECT id, %s as user_name, document_type as service_type, 
+                       'VERIFY' as queue_number, verification_result as status, 
+                       NULL as wait_time_minutes, uploaded_at as completed_at, 'verification' as type
+                FROM document_verifications 
+                WHERE user_id = %s
+                ORDER BY uploaded_at DESC LIMIT 100
+            """, (user['name'], user['id']))
+            verifications = list(cursor.fetchall())
+            transactions.extend(verifications)
+            
+        # Sort combined list by date descending using ISO string sort logic (safe for None or dates)
+        transactions.sort(key=lambda x: str(x['completed_at']) if x['completed_at'] else '', reverse=True)
+        # Trim to 100 elements max
+        transactions = transactions[:100]
+
         cursor.close()
         conn.close()
         
         # Convert datetime objects to strings
         for trans in transactions:
             if trans.get('completed_at'):
-                trans['completed_at'] = trans['completed_at'].isoformat()
+                import datetime
+                if isinstance(trans['completed_at'], datetime.datetime):
+                    trans['completed_at'] = trans['completed_at'].isoformat()
             if trans.get('created_at'):
-                trans['created_at'] = trans['created_at'].isoformat()
+                import datetime
+                if isinstance(trans['created_at'], datetime.datetime):
+                    trans['created_at'] = trans['created_at'].isoformat()
         
         return jsonify(transactions), 200
     except mysql.connector.Error as err:

@@ -248,7 +248,6 @@ function showDashboard(role, pushToHistory = true) {
         if (rightNameEl) rightNameEl.classList.add('d-none');
 
         initNotificationSupport();
-        showNotificationPermissionModal();
         loadStudentDashboard();
 
         hideDashboardLoadingOverlay(600);
@@ -604,11 +603,32 @@ function showPage(pageId, pushToHistory = true) {
 }
 
 // Handle browser back/forward buttons
-window.addEventListener('popstate', function (event) {
+window.addEventListener('popstate', async function (event) {
     if (event.state && event.state.pageId) {
-        showPage(event.state.pageId, false);
+        const target = event.state.pageId;
+        if (target === 'admin-dashboard' || target === 'student-dashboard') {
+            try {
+                const response = await fetch(`${API_BASE}/auth/me`, { credentials: 'include' });
+                if (response.ok) {
+                    const user = await response.json();
+                    if (user.role === 'admin' && target === 'admin-dashboard') {
+                        showPage('admin-dashboard', false);
+                    } else if (user.role !== 'admin' && target === 'student-dashboard') {
+                        showPage('student-dashboard', false);
+                    } else {
+                        showPage('login-page', false);
+                    }
+                } else {
+                    showPage('login-page', false);
+                }
+            } catch (err) {
+                showPage('login-page', false);
+            }
+        } else {
+            showPage(target, false);
+        }
     } else {
-        // Default to landing page if no state
+        // Default to landing page
         showPage('landing-page', false);
     }
 });
@@ -859,7 +879,6 @@ function renderNotificationPermissionBanner() {
                 return;
             }
             await initNotificationSupport();
-            showNotificationPermissionModal();
         });
     }
 }
@@ -946,7 +965,21 @@ async function handleLogin(e) {
             sessionStorage.setItem('queup_session_active', 'true');
 
             currentUser = data;
-            showDashboard(data.role);
+            
+            // Re-prompt notification when user logs in, only if student
+            if (data.role !== 'admin') {
+                 setTimeout(() => {
+                     if (!hasPromptedNotifications()) {
+                         showNotificationPermissionModal();
+                     }
+                 }, 1500);
+            }
+            
+            // REPLACESTATE to avoid going back to login screen!
+            const targetId = data.role === 'admin' ? 'admin-dashboard' : 'student-dashboard';
+            window.history.replaceState({ pageId: targetId }, "", "#" + targetId);
+            showDashboard(data.role, false);
+
             errorDiv.classList.add('d-none');
         } else {
             errorDiv.textContent = data.error || 'Login failed';
