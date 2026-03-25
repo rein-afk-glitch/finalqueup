@@ -376,7 +376,8 @@ function setupEventListeners() {
             const priority = priorityBtn.dataset.priority;
 
             if (priority === 'senior_pwd') {
-                alert("Please present a valid Senior/PWD ID at the counter for verification.");
+                const modal = new bootstrap.Modal(document.getElementById('pwdAlertModal'));
+                modal.show();
             }
 
             // Remove active class from all priority buttons
