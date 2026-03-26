@@ -1046,7 +1046,11 @@ async function logout() {
     }
 
     currentUser = null;
-    window.history.replaceState({ pageId: 'landing-page' }, '', ' '); showPage('landing-page', false);
+    
+    // Clear the hash from the URL and force a hard page reload.
+    // This absolutely guarantees that all sensitive text, forms, arrays, and variables inside the DOM memory are destroyed.
+    window.history.replaceState({ pageId: 'landing-page' }, '', window.location.pathname);
+    window.location.reload(true);
 }
 
 // Load admin dashboard
@@ -1249,7 +1253,7 @@ async function queueAction(queueId, action) {
                 'Content-Type': 'application/json'
             },
             credentials: 'include',
-            body: JSON.stringify({ queue_id: queueId, action: action })
+            body: JSON.stringify({ queue_id: queueId, action: action, expected_user_id: currentUser ? currentUser.id : null })
         });
 
         if (response.ok) {
@@ -1405,24 +1409,56 @@ function renderAnalyticsCharts(data) {
 // Display history
 function displayHistory(history) {
     const tbody = document.getElementById('history-tbody');
+    const verifyTbody = document.getElementById('verify-tbody');
 
-    if (history.length === 0) {
+    if (!tbody) return;
+
+    const queues = history.filter(t => t.type !== 'verification');
+    const verifications = history.filter(t => t.type === 'verification');
+
+    if (queues.length === 0) {
         tbody.innerHTML = '<tr><td colspan="6" class="text-center">No transaction history</td></tr>';
-        return;
+    } else {
+        tbody.innerHTML = queues.map(trans => {
+            return `
+                <tr>
+                    <td>${trans.queue_number}</td>
+                    <td>${trans.user_name}</td>
+                    <td>${formatServiceLabel(trans.service_type)}</td>
+                    <td><span class="badge bg-success">${trans.status}</span></td>
+                    <td>${trans.wait_time_minutes ? trans.wait_time_minutes + ' min' : '-'}</td>
+                    <td>${trans.completed_at ? new Date(trans.completed_at).toLocaleString() : '-'}</td>
+                </tr>
+            `;
+        }).join('');
     }
 
-    tbody.innerHTML = history.map(trans => {
-        return `
-            <tr>
-                <td>${trans.queue_number}</td>
-                <td>${trans.user_name}</td>
-                <td>${formatServiceLabel(trans.service_type)}</td>
-                <td><span class="badge bg-success">${trans.status}</span></td>
-                <td>${trans.wait_time_minutes ? trans.wait_time_minutes + ' min' : '-'}</td>
-                <td>${trans.completed_at ? new Date(trans.completed_at).toLocaleString() : '-'}</td>
-            </tr>
-        `;
-    }).join('');
+    if (!verifyTbody) return;
+
+    if (verifications.length === 0) {
+        verifyTbody.innerHTML = '<tr><td colspan="5" class="text-center">No AI verifications yet</td></tr>';
+    } else {
+        verifyTbody.innerHTML = verifications.map(trans => {
+            // Display status with a clickable button for details
+            let statusBadge = trans.status.includes('successfully') ? 'bg-success' : 'bg-danger';
+            let statusText = trans.status.includes('successfully') ? 'Verified' : 'Flagged';
+            // ensure no quotes break the HTML handler
+            let safeMessage = trans.status.replace(/'/g, "\\'").replace(/"/g, '&quot;');
+            return `
+                <tr>
+                    <td>${trans.user_name}</td>
+                    <td>${formatServiceLabel(trans.service_type)}</td>
+                    <td><span class="badge ${statusBadge}">${statusText}</span></td>
+                    <td>
+                        <button class="btn btn-sm btn-outline-info" onclick="alert('${safeMessage}')">
+                            <i class="bi bi-file-text"></i> View Result
+                        </button>
+                    </td>
+                    <td>${trans.completed_at ? new Date(trans.completed_at).toLocaleString() : '-'}</td>
+                </tr>
+            `;
+        }).join('');
+    }
 }
 
 // Load student dashboard
@@ -1852,7 +1888,7 @@ async function handleJoinQueue(e) {
                 'Content-Type': 'application/json'
             },
             credentials: 'include',
-            body: JSON.stringify({ service_type: serviceType, priority: priority })
+            body: JSON.stringify({ service_type: serviceType, priority: priority, expected_user_id: currentUser ? currentUser.id : null })
         });
 
         const data = await response.json();

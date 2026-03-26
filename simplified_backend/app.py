@@ -101,7 +101,7 @@ db_config = {
     'host': os.getenv('DB_HOST') or os.getenv('MYSQLHOST', 'localhost'),
     'database': os.getenv('DB_NAME') or os.getenv('MYSQLDATABASE', 'queup_db'),
     'pool_name': 'queup_pool',
-    'pool_size': 5
+    'pool_size': 32
 }
 
 try:
@@ -548,7 +548,7 @@ def notify_five_away_for_service(service_type):
 
         for entry in waiting:
             entry_number = parse_queue_numeric(entry.get('queue_number'))
-            if entry_number != target_number:
+            if entry_number is None or entry_number > target_number:
                 continue
             service_label = entry.get('service_type', '').replace('_', ' ').title()
             payload = {
@@ -717,6 +717,10 @@ def join_queue():
         return jsonify({'error': 'Only students can join queues'}), 403
     
     data = request.json
+    expected_user_id = data.get('expected_user_id')
+    if expected_user_id and str(user['id']) != str(expected_user_id):
+        return jsonify({'error': 'Session mismatch detected. Please refresh the page.'}), 400
+        
     service_type = data.get('service_type')
     priority = data.get('priority', 'regular')
     
@@ -836,13 +840,13 @@ def get_queue_status():
             cursor.execute("""
                 SELECT * FROM queue_entries 
                 WHERE status IN ('waiting', 'called', 'serving') AND service_type = %s
-                ORDER BY created_at ASC
+                ORDER BY priority = 'senior_pwd' DESC, created_at ASC
             """, (service_type,))
         else:
             cursor.execute("""
                 SELECT * FROM queue_entries 
                 WHERE status IN ('waiting', 'called', 'serving')
-                ORDER BY created_at ASC
+                ORDER BY priority = 'senior_pwd' DESC, created_at ASC
             """)
         
         entries = cursor.fetchall()
@@ -887,6 +891,10 @@ def queue_action():
         return jsonify({'error': 'User not found'}), 404
     
     data = request.json
+    expected_user_id = data.get('expected_user_id')
+    if expected_user_id and str(user['id']) != str(expected_user_id):
+        return jsonify({'error': 'Session mismatch detected. Please refresh the page.'}), 400
+
     queue_id = data.get('queue_id')
     action = data.get('action')
     

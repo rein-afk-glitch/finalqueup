@@ -531,24 +531,52 @@
                         <!-- History Panel -->
                         <div class="tab-pane fade" id="history-panel">
                             <div class="content-header">
-                                <h2>Transaction History</h2>
-                                <p>Comprehensive log of all completed and cancelled service requests.</p>
+                                <h2>Transaction History & Verifications</h2>
+                                <p>Comprehensive log of completed service requests and AI receipt verifications.</p>
                             </div>
                             <div class="dashboard-widget">
-                                <div id="history-list" class="table-responsive">
-                                    <table class="table align-middle">
-                                        <thead>
-                                            <tr>
-                                                <th>Queue #</th>
-                                                <th>Name</th>
-                                                <th>Service</th>
-                                                <th>Status</th>
-                                                <th>Wait Time</th>
-                                                <th>Completed</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody id="history-tbody"></tbody>
-                                    </table>
+                                <ul class="nav nav-tabs mb-3" id="history-tabs" role="tablist">
+                                    <li class="nav-item" role="presentation">
+                                        <button class="nav-link active" id="history-queue-tab" data-bs-toggle="tab" data-bs-target="#history-queue-content" type="button" role="tab">Queues Logs</button>
+                                    </li>
+                                    <li class="nav-item" role="presentation">
+                                        <button class="nav-link" id="history-verify-tab" data-bs-toggle="tab" data-bs-target="#history-verify-content" type="button" role="tab">AI Verifications</button>
+                                    </li>
+                                </ul>
+                                <div class="tab-content" id="historyTabContent">
+                                    <div class="tab-pane fade show active" id="history-queue-content" role="tabpanel">
+                                        <div id="history-list" class="table-responsive">
+                                            <table class="table align-middle">
+                                                <thead>
+                                                    <tr>
+                                                        <th>Queue #</th>
+                                                        <th>Name</th>
+                                                        <th>Service</th>
+                                                        <th>Status</th>
+                                                        <th>Wait Time</th>
+                                                        <th>Completed</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody id="history-tbody"></tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+                                    <div class="tab-pane fade" id="history-verify-content" role="tabpanel">
+                                        <div id="verification-history-list" class="table-responsive">
+                                            <table class="table align-middle">
+                                                <thead>
+                                                    <tr>
+                                                        <th>User Name</th>
+                                                        <th>Document Type</th>
+                                                        <th>Status</th>
+                                                        <th>Details</th>
+                                                        <th>Uploaded At</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody id="verify-tbody"></tbody>
+                                            </table>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
                         </div>
