@@ -1254,10 +1254,10 @@ def get_transaction_history():
                 cursor.execute("""
                     SELECT dv.id, u.name as user_name, dv.document_type as service_type, 
                            'VERIFY' as queue_number, dv.verification_result as status, 
-                           NULL as wait_time_minutes, dv.uploaded_at as completed_at, 'verification' as type
+                           NULL as wait_time_minutes, dv.created_at as completed_at, 'verification' as type
                     FROM document_verifications dv
                     JOIN users u ON dv.user_id = u.id
-                    ORDER BY dv.uploaded_at DESC LIMIT 100
+                    ORDER BY dv.created_at DESC LIMIT 100
                 """)
                 verifications = list(cursor.fetchall())
                 transactions.extend(verifications)
@@ -1273,10 +1273,10 @@ def get_transaction_history():
             cursor.execute("""
                 SELECT id, %s as user_name, document_type as service_type, 
                        'VERIFY' as queue_number, verification_result as status, 
-                       NULL as wait_time_minutes, uploaded_at as completed_at, 'verification' as type
+                       NULL as wait_time_minutes, created_at as completed_at, 'verification' as type
                 FROM document_verifications 
                 WHERE user_id = %s
-                ORDER BY uploaded_at DESC LIMIT 100
+                ORDER BY created_at DESC LIMIT 100
             """, (user['name'], user['id']))
             verifications = list(cursor.fetchall())
             transactions.extend(verifications)
