@@ -348,10 +348,14 @@ function setupEventListeners() {
             // Remove active class from all service buttons
             document.querySelectorAll('.service-btn').forEach(btn => {
                 btn.classList.remove('active');
+                btn.style.backgroundColor = '';
+                btn.style.color = '';
             });
 
             // Add active class to clicked button
             serviceBtn.classList.add('active');
+            serviceBtn.style.backgroundColor = '#8B0000';
+            serviceBtn.style.color = 'white';
 
             // Set the hidden input value
             document.getElementById('service-type').value = service;
@@ -382,10 +386,14 @@ function setupEventListeners() {
             // Remove active class from all priority buttons
             document.querySelectorAll('.priority-btn').forEach(btn => {
                 btn.classList.remove('active');
+                btn.style.backgroundColor = '';
+                btn.style.color = '';
             });
 
             // Add active class to clicked button
             priorityBtn.classList.add('active');
+            priorityBtn.style.backgroundColor = '#8B0000';
+            priorityBtn.style.color = 'white';
 
             // Set the hidden input value
             document.getElementById('priority').value = priority;
@@ -2383,18 +2391,18 @@ function updateQueueControls(queue) {
         
         if (activePriority === 'regular') {
             regularBtn.classList.add('active');
-            regularBtn.style.backgroundColor = 'var(--usa-red)';
+            regularBtn.style.backgroundColor = '#8B0000';
             regularBtn.style.color = 'white';
-            regularBtn.style.borderColor = 'var(--usa-red)';
+            regularBtn.style.borderColor = '#8B0000';
             
             seniorBtn.disabled = true;
             seniorBtn.style.opacity = '0.5';
             seniorBtn.style.pointerEvents = 'none';
         } else {
             seniorBtn.classList.add('active');
-            seniorBtn.style.backgroundColor = 'var(--usa-red)';
+            seniorBtn.style.backgroundColor = '#8B0000';
             seniorBtn.style.color = 'white';
-            seniorBtn.style.borderColor = 'var(--usa-red)';
+            seniorBtn.style.borderColor = '#8B0000';
             
             regularBtn.disabled = true;
             regularBtn.style.opacity = '0.5';
@@ -2404,9 +2412,9 @@ function updateQueueControls(queue) {
         serviceBtns.forEach(btn => {
             if (btn.dataset.service === queue.service_type) {
                 btn.classList.add('active');
-                btn.style.backgroundColor = 'var(--usa-red)';
+                btn.style.backgroundColor = '#8B0000';
                 btn.style.color = 'white';
-                btn.style.borderColor = 'var(--usa-red)';
+                btn.style.borderColor = '#8B0000';
                 btn.disabled = true;
             } else {
                 btn.disabled = true;
