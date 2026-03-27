@@ -1490,6 +1490,14 @@ function loadStudentDashboard() {
                 fetch(`${API_BASE}/queue/now-serving`, { credentials: 'include' })
             ]);
             const queue = queueRes.ok ? await queueRes.json() : null;
+            if (queueRes.ok && queue) {
+                lastQueueState = true;
+            } else if (!queueRes.ok && lastQueueState) {
+                lastQueueState = false;
+                if (typeof loadStudentHistory === 'function') {
+                    loadStudentHistory();
+                }
+            }
             const servingData = servingRes.ok ? await servingRes.json() : {};
             displayMyQueue(queue);
             displayNowServing(servingData);
