@@ -1770,6 +1770,8 @@ function updateNowServingVisibility(myQueue) {
     }
 }
 
+let lastQueueState = false;
+
 // Load my queue
 async function loadMyQueue() {
     try {
@@ -1780,6 +1782,16 @@ async function loadMyQueue() {
         if (response.ok) {
             const queue = await response.json();
             displayMyQueue(queue);
+            lastQueueState = true;
+        } else {
+            if (lastQueueState) {
+                // Queue has completed, instantly reload history to reflect changes
+                if (typeof loadStudentHistory === 'function') {
+                     loadStudentHistory();
+                }
+                lastQueueState = false;
+            }
+            displayMyQueue(null);
         }
     } catch (error) {
         console.error('Failed to load my queue:', error);
