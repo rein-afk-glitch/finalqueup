@@ -278,6 +278,35 @@ function disableAdminCompactMode() {
 
 // Setup event listeners
 function setupEventListeners() {
+    const regPass = document.getElementById('register-password');
+    if (regPass) {
+        regPass.addEventListener('input', (e) => {
+            const val = e.target.value;
+            const reqs = document.getElementById('password-requirements');
+            if (reqs) reqs.style.display = 'block';
+            
+            const check = (id, regex) => {
+                const el = document.getElementById(id);
+                if (!el) return;
+                const icon = el.querySelector('i');
+                const passed = regex.test(val);
+                if (passed) {
+                    el.style.color = '#198754';
+                    icon.className = 'bi bi-check-circle-fill text-success me-1';
+                } else {
+                    el.style.color = '';
+                    icon.className = 'bi bi-x-circle text-danger me-1';
+                }
+            };
+            
+            check('req-length', /.{8,}/);
+            check('req-upper', /[A-Z]/);
+            check('req-lower', /[a-z]/);
+            check('req-number', /[0-9]/);
+            check('req-special', /[!@#$%^&*(),.?":{}|<>+\-_=\/\[\]~`]/);
+        });
+    }
+
     // Admin History Auto-Refresh bindings
     const adminHistoryLink = document.querySelector('[href="#history-panel"]');
     if (adminHistoryLink) adminHistoryLink.addEventListener('click', () => { if (typeof loadHistory === 'function') setTimeout(loadHistory, 50); });
@@ -1037,6 +1066,13 @@ async function handleRegister(e) {
     };
 
     const errorDiv = document.getElementById('register-error');
+
+    const complexityRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*(),.?":{}|<>+\-_=\/\[\]~`]).{8,}$/;
+    if (!complexityRegex.test(formData.password)) {
+        errorDiv.textContent = 'Password must meet all security requirements.';
+        errorDiv.classList.remove('d-none');
+        return;
+    }
 
     try {
         const response = await fetch(`${API_BASE}/auth/register`, {

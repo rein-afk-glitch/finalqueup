@@ -578,6 +578,10 @@ def register():
     
     if not email or not password or not name:
         return jsonify({'error': 'Email, password, and name are required'}), 400
+        
+    complexity_regex = re.compile(r'^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*(),.?":{}|<>\-_+=\[\]~`\/]).{8,}$')
+    if not complexity_regex.match(password):
+        return jsonify({'error': 'Password does not meet complexity requirements.'}), 400
     
     conn = get_db_connection()
     if not conn:
