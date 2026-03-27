@@ -278,6 +278,11 @@ function disableAdminCompactMode() {
 
 // Setup event listeners
 function setupEventListeners() {
+    // Admin History Auto-Refresh bindings
+    const adminHistoryLink = document.querySelector('[href="#history-panel"]');
+    if (adminHistoryLink) adminHistoryLink.addEventListener('click', () => { if (typeof loadHistory === 'function') setTimeout(loadHistory, 50); });
+    const aiVerifyTab = document.getElementById('history-verify-tab');
+    if (aiVerifyTab) aiVerifyTab.addEventListener('shown.bs.tab', () => { if (typeof loadHistory === 'function') loadHistory(); });
     const studentHistoryTab = document.getElementById('student-history-tab');
     if (studentHistoryTab) {
         studentHistoryTab.addEventListener('click', () => {
