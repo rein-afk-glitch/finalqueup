@@ -2378,28 +2378,44 @@ function updateQueueControls(queue) {
     if (!regularBtn || !seniorBtn) return;
 
     if (queue) {
-        // User is IN a queue
+        // User is IN a queue - lock controls and force strict styling
         const activePriority = queue.priority || 'regular';
+        
         if (activePriority === 'regular') {
             regularBtn.classList.add('active');
+            regularBtn.style.backgroundColor = 'var(--usa-red)';
+            regularBtn.style.color = 'white';
+            regularBtn.style.borderColor = 'var(--usa-red)';
+            
             seniorBtn.disabled = true;
             seniorBtn.style.opacity = '0.5';
             seniorBtn.style.pointerEvents = 'none';
         } else {
             seniorBtn.classList.add('active');
+            seniorBtn.style.backgroundColor = 'var(--usa-red)';
+            seniorBtn.style.color = 'white';
+            seniorBtn.style.borderColor = 'var(--usa-red)';
+            
             regularBtn.disabled = true;
             regularBtn.style.opacity = '0.5';
             regularBtn.style.pointerEvents = 'none';
         }
         
         serviceBtns.forEach(btn => {
-            btn.disabled = true;
-            btn.style.opacity = '0.5';
-            btn.style.pointerEvents = 'none';
             if (btn.dataset.service === queue.service_type) {
                 btn.classList.add('active');
+                btn.style.backgroundColor = 'var(--usa-red)';
+                btn.style.color = 'white';
+                btn.style.borderColor = 'var(--usa-red)';
+                btn.disabled = true;
             } else {
+                btn.disabled = true;
+                btn.style.opacity = '0.5';
+                btn.style.pointerEvents = 'none';
                 btn.classList.remove('active');
+                btn.style.backgroundColor = '';
+                btn.style.color = '';
+                btn.style.borderColor = '';
             }
         });
 
@@ -2408,24 +2424,31 @@ function updateQueueControls(queue) {
             submitBtn.textContent = 'Already in a Queue';
         }
     } else {
-        // User NOT in a queue
-        regularBtn.disabled = false;
-        regularBtn.style.opacity = '1';
-        regularBtn.style.pointerEvents = 'auto';
-        regularBtn.classList.remove('active');
-
-        seniorBtn.disabled = false;
-        seniorBtn.style.opacity = '1';
-        seniorBtn.style.pointerEvents = 'auto';
-        seniorBtn.classList.remove('active');
+        // User NOT in a queue - unlock controls, clear forced inline styles
+        [regularBtn, seniorBtn].forEach(btn => {
+            btn.disabled = false;
+            btn.style.opacity = '1';
+            btn.style.pointerEvents = 'auto';
+            btn.classList.remove('active');
+            btn.style.backgroundColor = '';
+            btn.style.color = '';
+            btn.style.borderColor = '';
+        });
         
+        regularBtn.classList.add('active'); // Default back to regular visually
+        regularBtn.style.backgroundColor = ''; // Remove inline so CSS handles it
+        regularBtn.style.color = '';
+
         serviceBtns.forEach(btn => {
             btn.disabled = false;
             btn.style.opacity = '1';
             btn.style.pointerEvents = 'auto';
             btn.classList.remove('active');
+            btn.style.backgroundColor = '';
+            btn.style.color = '';
+            btn.style.borderColor = '';
         });
-
+        
         if (submitBtn) {
             submitBtn.disabled = false;
             submitBtn.textContent = 'Join Queue';
