@@ -128,7 +128,7 @@ function removeDuplicateStudentQueueCards() {
 // Check authentication status
 async function checkAuthStatus() {
     try {
-        const response = await fetch(`${API_BASE}/auth/me`, {
+        const response = await fetch(`${API_BASE}/auth/me?t=${Date.now()}`, {
             credentials: 'include'
         });
 
@@ -616,7 +616,7 @@ window.addEventListener('popstate', async function (event) {
         const target = event.state.pageId;
         if (target === 'admin-dashboard' || target === 'student-dashboard') {
             try {
-                const response = await fetch(`${API_BASE}/auth/me`, { credentials: 'include' });
+                const response = await fetch(`${API_BASE}/auth/me?t=${Date.now()}`, { credentials: 'include' });
                 if (response.ok) {
                     const user = await response.json();
                     if (user.role === 'admin' && target === 'admin-dashboard') {
@@ -652,7 +652,7 @@ async function initApp() {
     const hasActiveSession = sessionStorage.getItem('queup_session_active');
 
     try {
-        const response = await fetch(`${API_BASE}/auth/me`, {
+        const response = await fetch(`${API_BASE}/auth/me?t=${Date.now()}`, {
             credentials: 'include'
         });
 
@@ -1280,7 +1280,7 @@ async function queueAction(queueId, action) {
 // Load history
 async function loadHistory() {
     try {
-        const response = await fetch(`${API_BASE}/transactions/history`, {
+        const response = await fetch(`${API_BASE}/transactions/history?t=${Date.now()}`, {
             credentials: 'include'
         });
 
@@ -1480,7 +1480,7 @@ function loadStudentDashboard() {
     const pollStudentQueue = async () => {
         try {
             const [queueRes, servingRes] = await Promise.all([
-                fetch(`${API_BASE}/queue/my-queue`, { credentials: 'include' }),
+                fetch(`${API_BASE}/queue/my-queue?t=${Date.now()}`, { credentials: 'include' }),
                 fetch(`${API_BASE}/queue/now-serving`, { credentials: 'include' })
             ]);
             const queue = queueRes.ok ? await queueRes.json() : null;
@@ -1767,7 +1767,7 @@ function updateNowServingVisibility(myQueue) {
 // Load my queue
 async function loadMyQueue() {
     try {
-        const response = await fetch(`${API_BASE}/queue/my-queue`, {
+        const response = await fetch(`${API_BASE}/queue/my-queue?t=${Date.now()}`, {
             credentials: 'include'
         });
 
@@ -1988,7 +1988,7 @@ async function handleVerification(e) {
 // Load student history
 async function loadStudentHistory() {
     try {
-        const response = await fetch(`${API_BASE}/transactions/history`, {
+        const response = await fetch(`${API_BASE}/transactions/history?t=${Date.now()}`, {
             credentials: 'include'
         });
 
