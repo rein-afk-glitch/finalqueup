@@ -548,7 +548,7 @@ function setupEventListeners() {
                 const selectEl = document.getElementById(`compact-waiting-${service}`);
                 const queueId = selectEl ? selectEl.value : '';
                 if (!queueId) {
-                    alert('Select a queue number to call.');
+                    console.log('Select a queue number to call.');
                     return;
                 }
                 queueAction(queueId, 'call').then(loadAdminCompactQueue);
@@ -556,7 +556,7 @@ function setupEventListeners() {
             if (action === 'next') {
                 const queueId = compactActionBtn.dataset.queueId;
                 if (!queueId) {
-                    alert('No called queue to advance.');
+                    console.log('No called queue to advance.');
                     return;
                 }
                 queueAction(queueId, 'next').then(loadAdminCompactQueue);
@@ -1019,7 +1019,7 @@ async function handleRegister(e) {
             // Close modal and show success
             const modal = bootstrap.Modal.getInstance(document.getElementById('registerModal'));
             modal.hide();
-            alert('Registration successful! Please login.');
+            console.log('Registration successful! Please login.');
             document.getElementById('register-form').reset();
         } else {
             errorDiv.textContent = data.error || 'Registration failed';
@@ -1262,10 +1262,10 @@ async function queueAction(queueId, action) {
             loadHistory();
         } else {
             const data = await response.json();
-            alert(data.error || 'Action failed');
+            console.log(data.error || 'Action failed');
         }
     } catch (error) {
-        alert('Connection error. Please try again.');
+        console.log('Connection error. Please try again.');
     }
 }
 
@@ -1281,7 +1281,7 @@ async function loadHistory() {
             displayHistory(history);
         } else {
             const data = await response.json();
-            alert('History Error: ' + (data.error || 'Server error'));
+            console.log('History Error: ' + (data.error || 'Server error'));
         }
     } catch (error) {
         console.error('Failed to load history:', error);
@@ -1450,7 +1450,7 @@ function displayHistory(history) {
                     <td>${formatServiceLabel(trans.service_type)}</td>
                     <td><span class="badge ${statusBadge}">${statusText}</span></td>
                     <td>
-                        <button class="btn btn-sm btn-outline-info" onclick="alert('${safeMessage}')">
+                        <button class="btn btn-sm btn-outline-info" onclick="console.log('${safeMessage}')">
                             <i class="bi bi-file-text"></i> View Result
                         </button>
                     </td>
@@ -1584,7 +1584,7 @@ async function requestNotificationPermission() {
     if (Notification.permission !== 'default') return Notification.permission;
     if (hasPromptedNotifications()) return Notification.permission;
     if (!canRequestNotifications()) {
-        alert('Notifications require a secure (HTTPS) connection. Please open this site over HTTPS to enable alerts.');
+        console.log('Notifications require a secure (HTTPS) connection. Please open this site over HTTPS to enable alerts.');
         return 'denied';
     }
     localStorage.setItem(NOTIFICATION_PROMPT_KEY, '1');
@@ -1877,7 +1877,7 @@ async function handleJoinQueue(e) {
     const priority = document.getElementById('priority').value;
 
     if (!serviceType) {
-        alert('Please select a service');
+        console.log('Please select a service');
         return;
     }
 
@@ -1915,10 +1915,10 @@ async function handleJoinQueue(e) {
                 loadMyQueue();
             }, 1000);
         } else {
-            alert(data.error || 'Failed to join queue');
+            console.log(data.error || 'Failed to join queue');
         }
     } catch (error) {
-        alert('Connection error. Please try again.');
+        console.log('Connection error. Please try again.');
     }
 }
 
@@ -1934,7 +1934,7 @@ async function handleVerification(e) {
     const resultDiv = document.getElementById('verification-result');
 
     if (!fileInput.files[0]) {
-        alert('Please select a file');
+        console.log('Please select a file');
         return;
     }
 
@@ -2058,13 +2058,13 @@ async function handleCreateAdmin(e) {
         });
         const data = await response.json();
         if (!response.ok) {
-            alert(data.error || 'Failed to create admin');
+            console.log(data.error || 'Failed to create admin');
             return;
         }
         document.getElementById('create-admin-form').reset();
         await loadAdminManagement();
     } catch (error) {
-        alert('Connection error. Please try again.');
+        console.log('Connection error. Please try again.');
     }
 }
 
@@ -2200,12 +2200,12 @@ async function updateAdminRole(adminId, adminService) {
         });
         const data = await response.json();
         if (!response.ok) {
-            alert(data.error || 'Failed to update admin role');
+            console.log(data.error || 'Failed to update admin role');
             return;
         }
         await loadAdminList();
     } catch (error) {
-        alert('Connection error. Please try again.');
+        console.log('Connection error. Please try again.');
     }
 }
 
@@ -2218,12 +2218,12 @@ async function deleteAdmin(adminId) {
         });
         const data = await response.json();
         if (!response.ok) {
-            alert(data.error || 'Failed to delete admin');
+            console.log(data.error || 'Failed to delete admin');
             return;
         }
         await loadAdminList();
     } catch (error) {
-        alert('Connection error. Please try again.');
+        console.log('Connection error. Please try again.');
     }
 }
 
@@ -2236,12 +2236,12 @@ async function deleteUser(userId) {
         });
         const data = await response.json();
         if (!response.ok) {
-            alert(data.error || 'Failed to delete user');
+            console.log(data.error || 'Failed to delete user');
             return;
         }
         await loadUserList();
     } catch (error) {
-        alert('Connection error. Please try again.');
+        console.log('Connection error. Please try again.');
     }
 }
 
@@ -2364,7 +2364,7 @@ async function updateServiceSetting(serviceType, updates) {
 
         loadServiceSettings();
     } catch (error) {
-        alert(error.message);
+        console.log(error.message);
     }
 }
 
