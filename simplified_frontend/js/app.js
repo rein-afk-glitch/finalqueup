@@ -2432,29 +2432,31 @@ function updateQueueControls(queue) {
             submitBtn.textContent = 'Already in a Queue';
         }
     } else {
-        // User NOT in a queue - unlock controls, clear forced inline styles
+        // User NOT in a queue - unlock controls, respect manual selection
         [regularBtn, seniorBtn].forEach(btn => {
             btn.disabled = false;
             btn.style.opacity = '1';
             btn.style.pointerEvents = 'auto';
-            btn.classList.remove('active');
-            btn.style.backgroundColor = '';
-            btn.style.color = '';
-            btn.style.borderColor = '';
+            if (btn.classList.contains('active')) {
+                btn.style.backgroundColor = '#8B0000';
+                btn.style.color = 'white';
+            } else {
+                btn.style.backgroundColor = '';
+                btn.style.color = '';
+            }
         });
-        
-        regularBtn.classList.add('active'); // Default back to regular visually
-        regularBtn.style.backgroundColor = ''; // Remove inline so CSS handles it
-        regularBtn.style.color = '';
 
         serviceBtns.forEach(btn => {
             btn.disabled = false;
             btn.style.opacity = '1';
             btn.style.pointerEvents = 'auto';
-            btn.classList.remove('active');
-            btn.style.backgroundColor = '';
-            btn.style.color = '';
-            btn.style.borderColor = '';
+            if (btn.classList.contains('active')) {
+                btn.style.backgroundColor = '#8B0000';
+                btn.style.color = 'white';
+            } else {
+                btn.style.backgroundColor = '';
+                btn.style.color = '';
+            }
         });
         
         if (submitBtn) {
