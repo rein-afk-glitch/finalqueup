@@ -548,7 +548,7 @@ function setupEventListeners() {
                 const selectEl = document.getElementById(`compact-waiting-${service}`);
                 const queueId = selectEl ? selectEl.value : '';
                 if (!queueId) {
-                    showSystemAlert('Select a queue number to call.', 'danger');
+                    alert('Select a queue number to call.');
                     return;
                 }
                 queueAction(queueId, 'call').then(loadAdminCompactQueue);
@@ -556,7 +556,7 @@ function setupEventListeners() {
             if (action === 'next') {
                 const queueId = compactActionBtn.dataset.queueId;
                 if (!queueId) {
-                    showSystemAlert('No called queue to advance.', 'danger');
+                    alert('No called queue to advance.');
                     return;
                 }
                 queueAction(queueId, 'next').then(loadAdminCompactQueue);
@@ -1019,7 +1019,7 @@ async function handleRegister(e) {
             // Close modal and show success
             const modal = bootstrap.Modal.getInstance(document.getElementById('registerModal'));
             modal.hide();
-            showSystemAlert('Registration successful! Please login.', 'success');
+            alert('Registration successful! Please login.');
             document.getElementById('register-form').reset();
         } else {
             errorDiv.textContent = data.error || 'Registration failed';
@@ -1262,10 +1262,10 @@ async function queueAction(queueId, action) {
             loadHistory();
         } else {
             const data = await response.json();
-            showSystemAlert(data.error || 'Action failed', 'danger');
+            alert(data.error || 'Action failed');
         }
     } catch (error) {
-        showSystemAlert('Connection error. Please try again.', 'danger');
+        alert('Connection error. Please try again.');
     }
 }
 
@@ -1281,7 +1281,7 @@ async function loadHistory() {
             displayHistory(history);
         } else {
             const data = await response.json();
-            showSystemAlert('History Error: ' + (data.error || 'Server error'), 'danger');
+            alert('History Error: ' + (data.error || 'Server error'));
         }
     } catch (error) {
         console.error('Failed to load history:', error);
@@ -1584,7 +1584,7 @@ async function requestNotificationPermission() {
     if (Notification.permission !== 'default') return Notification.permission;
     if (hasPromptedNotifications()) return Notification.permission;
     if (!canRequestNotifications()) {
-        showSystemAlert('Notifications require a secure (HTTPS) connection. Please open this site over HTTPS to enable alerts.', 'danger');
+        alert('Notifications require a secure (HTTPS) connection. Please open this site over HTTPS to enable alerts.');
         return 'denied';
     }
     localStorage.setItem(NOTIFICATION_PROMPT_KEY, '1');
@@ -1877,7 +1877,7 @@ async function handleJoinQueue(e) {
     const priority = document.getElementById('priority').value;
 
     if (!serviceType) {
-        showSystemAlert('Please select a service', 'danger');
+        alert('Please select a service');
         return;
     }
 
@@ -1915,10 +1915,10 @@ async function handleJoinQueue(e) {
                 loadMyQueue();
             }, 1000);
         } else {
-            showSystemAlert(data.error || 'Failed to join queue', 'danger');
+            alert(data.error || 'Failed to join queue');
         }
     } catch (error) {
-        showSystemAlert('Connection error. Please try again.', 'danger');
+        alert('Connection error. Please try again.');
     }
 }
 
@@ -1934,7 +1934,7 @@ async function handleVerification(e) {
     const resultDiv = document.getElementById('verification-result');
 
     if (!fileInput.files[0]) {
-        showSystemAlert('Please select a file', 'danger');
+        alert('Please select a file');
         return;
     }
 
@@ -2058,13 +2058,13 @@ async function handleCreateAdmin(e) {
         });
         const data = await response.json();
         if (!response.ok) {
-            showSystemAlert(data.error || 'Failed to create admin', 'danger');
+            alert(data.error || 'Failed to create admin');
             return;
         }
         document.getElementById('create-admin-form').reset();
         await loadAdminManagement();
     } catch (error) {
-        showSystemAlert('Connection error. Please try again.', 'danger');
+        alert('Connection error. Please try again.');
     }
 }
 
@@ -2200,12 +2200,12 @@ async function updateAdminRole(adminId, adminService) {
         });
         const data = await response.json();
         if (!response.ok) {
-            showSystemAlert(data.error || 'Failed to update admin role', 'danger');
+            alert(data.error || 'Failed to update admin role');
             return;
         }
         await loadAdminList();
     } catch (error) {
-        showSystemAlert('Connection error. Please try again.', 'danger');
+        alert('Connection error. Please try again.');
     }
 }
 
@@ -2218,12 +2218,12 @@ async function deleteAdmin(adminId) {
         });
         const data = await response.json();
         if (!response.ok) {
-            showSystemAlert(data.error || 'Failed to delete admin', 'danger');
+            alert(data.error || 'Failed to delete admin');
             return;
         }
         await loadAdminList();
     } catch (error) {
-        showSystemAlert('Connection error. Please try again.', 'danger');
+        alert('Connection error. Please try again.');
     }
 }
 
@@ -2236,12 +2236,12 @@ async function deleteUser(userId) {
         });
         const data = await response.json();
         if (!response.ok) {
-            showSystemAlert(data.error || 'Failed to delete user', 'danger');
+            alert(data.error || 'Failed to delete user');
             return;
         }
         await loadUserList();
     } catch (error) {
-        showSystemAlert('Connection error. Please try again.', 'danger');
+        alert('Connection error. Please try again.');
     }
 }
 
@@ -2364,7 +2364,7 @@ async function updateServiceSetting(serviceType, updates) {
 
         loadServiceSettings();
     } catch (error) {
-        showSystemAlert(error.message, 'danger');
+        alert(error.message);
     }
 }
 
@@ -2433,47 +2433,4 @@ function updateQueueControls(queue) {
     }
 }
 
-// System Alert Toast Function
-function showSystemAlert(message, type = 'danger') {
-    const toastContainer = document.getElementById('system-toast-container');
-    if (!toastContainer) {
-        alert(message);
-        return;
-    }
 
-    let icon = 'bi-exclamation-circle-fill';
-    let themeClass = 'text-bg-danger';
-
-    if (type === 'success') {
-        icon = 'bi-check-circle-fill';
-        themeClass = 'text-bg-success';
-    } else if (type === 'info' || type === 'primary') {
-        icon = 'bi-info-circle-fill';
-        themeClass = 'text-bg-primary';
-    }
-
-    const toastId = 'toast-' + Date.now() + Math.floor(Math.random() * 1000);
-    const toastHTML = `
-        <div id="${toastId}" class="toast align-items-center ${themeClass} border-0 shadow-lg mb-2" role="alert" aria-live="assertive" aria-atomic="true" style="border-radius: 12px; min-width: 300px;">
-            <div class="d-flex">
-                <div class="toast-body d-flex align-items-center fw-medium" style="font-size: 1.05rem; padding: 1rem 1.25rem;">
-                    <i class="bi ${icon} me-3 fs-4"></i>
-                    <span>${message}</span>
-                </div>
-                <button type="button" class="btn-close btn-close-white me-3 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
-            </div>
-        </div>
-    `;
-
-    toastContainer.insertAdjacentHTML('beforeend', toastHTML);
-    const toastEl = document.getElementById(toastId);
-    if (!toastEl) return;
-    
-    // Create and show Toast
-    const toast = new bootstrap.Toast(toastEl, { delay: 4000 });
-    toast.show();
-    
-    toastEl.addEventListener('hidden.bs.toast', () => {
-        toastEl.remove();
-    });
-}
