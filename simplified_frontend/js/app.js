@@ -300,11 +300,13 @@ function setupEventListeners() {
     const enableNotificationsBtn = document.getElementById('enable-notifications-btn');
     if (enableNotificationsBtn) {
         enableNotificationsBtn.addEventListener('click', async () => {
-            if (isNotificationDenied()) {
+            const permission = getNotificationPermission();
+            const dismissed = permission === 'default' && hasPromptedNotifications();
+            if (permission === 'denied' || permission === 'unsupported' || dismissed) {
                 showNotificationPermissionModal();
                 return;
             }
-            const permission = await requestNotificationPermission();
+            const permStatus = await requestNotificationPermission();
             if (permission === 'granted') {
                 await ensurePushSubscription();
             }
@@ -900,10 +902,12 @@ function renderNotificationPermissionBanner() {
     const btn = document.getElementById('enable-alerts-btn');
     if (btn) {
         btn.addEventListener('click', async () => {
-            if (isNotificationDenied()) {
-                showNotificationPermissionModal();
-                return;
-            }
+             const permission = getNotificationPermission();
+             const dismissed = permission === 'default' && hasPromptedNotifications();
+             if (permission === 'denied' || permission === 'unsupported' || dismissed) {
+                 showNotificationPermissionModal();
+                 return;
+             }
             await initNotificationSupport();
         });
     }
