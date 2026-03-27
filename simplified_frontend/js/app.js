@@ -678,6 +678,12 @@ async function initApp() {
         console.error('Auth check failed:', error);
         window.history.replaceState({ pageId: 'landing-page' }, "", " ");
         showPage('landing-page', false);
+    } finally {
+        const authLoader = document.getElementById('auth-loader');
+        if (authLoader) {
+            authLoader.style.opacity = '0';
+            setTimeout(() => authLoader.remove(), 300);
+        }
     }
 }
 
