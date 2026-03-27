@@ -278,6 +278,12 @@ function disableAdminCompactMode() {
 
 // Setup event listeners
 function setupEventListeners() {
+    const studentHistoryTab = document.getElementById('student-history-tab');
+    if (studentHistoryTab) {
+        studentHistoryTab.addEventListener('click', () => {
+             if (typeof loadStudentHistory === 'function') setTimeout(loadStudentHistory, 50);
+        });
+    }
     const historyPanel = document.getElementById('student-history-panel');
     if (historyPanel) {
         historyPanel.addEventListener('shown.bs.collapse', () => {
