@@ -1597,3 +1597,20 @@ pre {
 .nav-tabs {
     border-bottom: 1px solid var(--border-color);
 }
+/* Priority Buttons Theme */
+.priority-btn {
+    border: 2px solid var(--usa-red);
+    color: var(--usa-red);
+    background-color: transparent;
+    transition: all 0.3s ease;
+    border-radius: 12px;
+}
+.priority-btn:hover {
+    background-color: rgba(139, 0, 0, 0.1);
+    color: var(--usa-red);
+}
+.priority-btn.active {
+    background-color: var(--usa-red) !important;
+    color: white !important;
+    border-color: var(--usa-red) !important;
+}

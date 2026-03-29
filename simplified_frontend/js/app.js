@@ -132,7 +132,7 @@ function removeDuplicateStudentQueueCards() {
 // Check authentication status
 async function checkAuthStatus() {
     try {
-        const response = await fetch(`${API_BASE}/auth/me`, {
+        const response = await fetch(`${API_BASE}/auth/me?t=${Date.now()}`, {
             credentials: 'include'
         });
 
@@ -252,7 +252,6 @@ function showDashboard(role, pushToHistory = true) {
         if (rightNameEl) rightNameEl.classList.add('d-none');
 
         initNotificationSupport();
-        maybePromptInitialPermissions();
         loadStudentDashboard();
 
         hideDashboardLoadingOverlay(600);
@@ -283,6 +282,52 @@ function disableAdminCompactMode() {
 
 // Setup event listeners
 function setupEventListeners() {
+    const regPass = document.getElementById('register-password');
+    if (regPass) {
+        regPass.addEventListener('input', (e) => {
+            const val = e.target.value;
+            const reqs = document.getElementById('password-requirements');
+            if (reqs) reqs.style.display = 'block';
+            
+            const check = (id, regex) => {
+                const el = document.getElementById(id);
+                if (!el) return;
+                const icon = el.querySelector('i');
+                const passed = regex.test(val);
+                if (passed) {
+                    el.style.color = '#198754';
+                    icon.className = 'bi bi-check-circle-fill text-success me-1';
+                } else {
+                    el.style.color = '';
+                    icon.className = 'bi bi-x-circle text-danger me-1';
+                }
+            };
+            
+            check('req-length', /.{8,}/);
+            check('req-upper', /[A-Z]/);
+            check('req-lower', /[a-z]/);
+            check('req-number', /[0-9]/);
+            check('req-special', /[!@#$%^&*(),.?":{}|<>+\-_=\/\[\]~`]/);
+        });
+    }
+
+    // Admin History Auto-Refresh bindings
+    const adminHistoryLink = document.querySelector('[href="#history-panel"]');
+    if (adminHistoryLink) adminHistoryLink.addEventListener('click', () => { if (typeof loadHistory === 'function') setTimeout(loadHistory, 50); });
+    const aiVerifyTab = document.getElementById('history-verify-tab');
+    if (aiVerifyTab) aiVerifyTab.addEventListener('shown.bs.tab', () => { if (typeof loadHistory === 'function') loadHistory(); });
+    const studentHistoryTab = document.getElementById('student-history-tab');
+    if (studentHistoryTab) {
+        studentHistoryTab.addEventListener('click', () => {
+             if (typeof loadStudentHistory === 'function') setTimeout(loadStudentHistory, 50);
+        });
+    }
+    const historyPanel = document.getElementById('student-history-panel');
+    if (historyPanel) {
+        historyPanel.addEventListener('shown.bs.collapse', () => {
+             if (typeof loadStudentHistory === 'function') loadStudentHistory();
+        });
+    }
     // Login form
     document.getElementById('login-form').addEventListener('submit', handleLogin);
 
@@ -293,11 +338,13 @@ function setupEventListeners() {
     const enableNotificationsBtn = document.getElementById('enable-notifications-btn');
     if (enableNotificationsBtn) {
         enableNotificationsBtn.addEventListener('click', async () => {
-            if (isNotificationDenied()) {
+            const permission = getNotificationPermission();
+            const dismissed = permission === 'default' && hasPromptedNotifications();
+            if (permission === 'denied' || permission === 'unsupported' || dismissed) {
                 showNotificationPermissionModal();
                 return;
             }
-            const permission = await requestNotificationPermission();
+            const permStatus = await requestNotificationPermission();
             if (permission === 'granted') {
                 await ensurePushSubscription();
             }
@@ -410,10 +457,14 @@ function setupEventListeners() {
             // Remove active class from all service buttons
             document.querySelectorAll('.service-btn').forEach(btn => {
                 btn.classList.remove('active');
+                btn.style.backgroundColor = '';
+                btn.style.color = '';
             });
 
             // Add active class to clicked button
             serviceBtn.classList.add('active');
+            serviceBtn.style.backgroundColor = '#8B0000';
+            serviceBtn.style.color = 'white';
 
             // Set the hidden input value
             document.getElementById('service-type').value = service;
@@ -436,13 +487,22 @@ function setupEventListeners() {
             const priorityBtn = e.target.closest('.priority-btn');
             const priority = priorityBtn.dataset.priority;
 
+            if (priority === 'senior_pwd') {
+                const modal = new bootstrap.Modal(document.getElementById('pwdAlertModal'));
+                modal.show();
+            }
+
             // Remove active class from all priority buttons
             document.querySelectorAll('.priority-btn').forEach(btn => {
                 btn.classList.remove('active');
+                btn.style.backgroundColor = '';
+                btn.style.color = '';
             });
 
             // Add active class to clicked button
             priorityBtn.classList.add('active');
+            priorityBtn.style.backgroundColor = '#8B0000';
+            priorityBtn.style.color = 'white';
 
             // Set the hidden input value
             document.getElementById('priority').value = priority;
@@ -609,7 +669,7 @@ function setupEventListeners() {
                 const selectEl = document.getElementById(`compact-waiting-${service}`);
                 const queueId = selectEl ? selectEl.value : '';
                 if (!queueId) {
-                    alert('Select a queue number to call.');
+                    console.log('Select a queue number to call.');
                     return;
                 }
                 queueAction(queueId, 'call').then(loadAdminCompactQueue);
@@ -617,7 +677,7 @@ function setupEventListeners() {
             if (action === 'next') {
                 const queueId = compactActionBtn.dataset.queueId;
                 if (!queueId) {
-                    alert('No called queue to advance.');
+                    console.log('No called queue to advance.');
                     return;
                 }
                 queueAction(queueId, 'next').then(loadAdminCompactQueue);
@@ -664,12 +724,33 @@ function showPage(pageId, pushToHistory = true) {
 }
 
 // Handle browser back/forward buttons
-window.addEventListener('popstate', function (event) {
+window.addEventListener('popstate', async function (event) {
     if (event.state && event.state.pageId) {
-        showPage(event.state.pageId, false);
+        const target = event.state.pageId;
+        if (target === 'admin-dashboard' || target === 'student-dashboard') {
+            try {
+                const response = await fetch(`${API_BASE}/auth/me?t=${Date.now()}`, { credentials: 'include' });
+                if (response.ok) {
+                    const user = await response.json();
+                    if (user.role === 'admin' && target === 'admin-dashboard') {
+                        showPage('admin-dashboard', false);
+                    } else if (user.role !== 'admin' && target === 'student-dashboard') {
+                        showPage('student-dashboard', false);
+                    } else {
+                        showPage('login-page', false);
+                    }
+                } else {
+                    showPage('login-page', false);
+                }
+            } catch (err) {
+                showPage('login-page', false);
+            }
+        } else {
+            showPage(target, false);
+        }
     } else {
-        // Default to landing page if no state
-        showPage('login-page', false);
+        // Default to landing page
+        showPage('landing-page', false);
     }
 });
 
@@ -684,7 +765,7 @@ async function initApp() {
     const hasActiveSession = sessionStorage.getItem('queup_session_active');
 
     try {
-        const response = await fetch(`${API_BASE}/auth/me`, {
+        const response = await fetch(`${API_BASE}/auth/me?t=${Date.now()}`, {
             credentials: 'include'
         });
 
@@ -710,6 +791,12 @@ async function initApp() {
         console.error('Auth check failed:', error);
         window.history.replaceState({ pageId: 'landing-page' }, "", " ");
         showPage('landing-page', false);
+    } finally {
+        const authLoader = document.getElementById('auth-loader');
+        if (authLoader) {
+            authLoader.style.opacity = '0';
+            setTimeout(() => authLoader.remove(), 300);
+        }
     }
 }
 
@@ -978,12 +1065,13 @@ function renderNotificationPermissionBanner() {
     const btn = document.getElementById('enable-alerts-btn');
     if (btn) {
         btn.addEventListener('click', async () => {
-            if (isNotificationDenied()) {
-                showNotificationPermissionModal();
-                return;
-            }
+             const permission = getNotificationPermission();
+             const dismissed = permission === 'default' && hasPromptedNotifications();
+             if (permission === 'denied' || permission === 'unsupported' || dismissed) {
+                 showNotificationPermissionModal();
+                 return;
+             }
             await initNotificationSupport();
-            showNotificationPermissionModal();
         });
     }
 }
@@ -1064,7 +1152,21 @@ async function handleLogin(e) {
             sessionStorage.setItem('queup_session_active', 'true');
 
             currentUser = data;
-            showDashboard(data.role);
+            
+            // Re-prompt notification when user logs in, only if student
+            if (data.role !== 'admin') {
+                 setTimeout(() => {
+                     if (!hasPromptedNotifications()) {
+                         showNotificationPermissionModal();
+                     }
+                 }, 1500);
+            }
+            
+            // REPLACESTATE to avoid going back to login screen!
+            const targetId = data.role === 'admin' ? 'admin-dashboard' : 'student-dashboard';
+            window.history.replaceState({ pageId: targetId }, "", "#" + targetId);
+            showDashboard(data.role, false);
+
             errorDiv.classList.add('d-none');
         } else {
             errorDiv.textContent = data.error || 'Login failed';
@@ -1088,6 +1190,13 @@ async function handleRegister(e) {
 
     const errorDiv = document.getElementById('register-error');
 
+    const complexityRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*(),.?":{}|<>+\-_=\/\[\]~`]).{8,}$/;
+    if (!complexityRegex.test(formData.password)) {
+        errorDiv.textContent = 'Password must meet all security requirements.';
+        errorDiv.classList.remove('d-none');
+        return;
+    }
+
     try {
         const response = await fetch(`${API_BASE}/auth/register`, {
             method: 'POST',
@@ -1104,7 +1213,7 @@ async function handleRegister(e) {
             // Close modal and show success
             const modal = bootstrap.Modal.getInstance(document.getElementById('registerModal'));
             modal.hide();
-            alert('Registration successful! Please login.');
+            console.log('Registration successful! Please login.');
             document.getElementById('register-form').reset();
         } else {
             errorDiv.textContent = data.error || 'Registration failed';
@@ -1131,7 +1240,11 @@ async function logout() {
     }
 
     currentUser = null;
-    showLogin();
+    
+    // Clear the hash from the URL and force a hard page reload.
+    // This absolutely guarantees that all sensitive text, forms, arrays, and variables inside the DOM memory are destroyed.
+    window.history.replaceState({ pageId: 'landing-page' }, '', window.location.pathname);
+    window.location.reload(true);
 }
 
 // Load admin dashboard
@@ -1334,7 +1447,7 @@ async function queueAction(queueId, action) {
                 'Content-Type': 'application/json'
             },
             credentials: 'include',
-            body: JSON.stringify({ queue_id: queueId, action: action })
+            body: JSON.stringify({ queue_id: queueId, action: action, expected_user_id: currentUser ? currentUser.id : null })
         });
 
         if (response.ok) {
@@ -1343,26 +1456,26 @@ async function queueAction(queueId, action) {
             loadHistory();
         } else {
             const data = await response.json();
-            alert(data.error || 'Action failed');
+            console.log(data.error || 'Action failed');
         }
     } catch (error) {
-        alert('Connection error. Please try again.');
+        console.log('Connection error. Please try again.');
     }
 }
 
 // Load history
 async function loadHistory() {
     try {
-        const response = await fetch(`${API_BASE}/transactions/history`, {
-            credentials: 'include',
-            cache: 'no-store'
+        const response = await fetch(`${API_BASE}/transactions/history?t=${Date.now()}`, {
+            credentials: 'include'
         });
 
         if (response.ok) {
             const history = await response.json();
             displayHistory(history);
         } else {
-            displayHistory([]);
+            const data = await response.json();
+            console.log('History Error: ' + (data.error || 'Server error'));
         }
     } catch (error) {
         console.error('Failed to load history:', error);
@@ -1518,25 +1631,56 @@ function formatDateTime(value) {
 // Display history
 function displayHistory(history) {
     const tbody = document.getElementById('history-tbody');
+    const verifyTbody = document.getElementById('verify-tbody');
+
     if (!tbody) return;
 
-    if (!Array.isArray(history) || history.length === 0) {
+    const queues = history.filter(t => t.type !== 'verification');
+    const verifications = history.filter(t => t.type === 'verification');
+
+    if (queues.length === 0) {
         tbody.innerHTML = '<tr><td colspan="6" class="text-center">No transaction history</td></tr>';
-        return;
+    } else {
+        tbody.innerHTML = queues.map(trans => {
+            return `
+                <tr>
+                    <td>${trans.queue_number}</td>
+                    <td>${trans.user_name}</td>
+                    <td>${formatServiceLabel(trans.service_type)}</td>
+                    <td><span class="badge bg-success">${trans.status}</span></td>
+                    <td>${trans.wait_time_minutes ? trans.wait_time_minutes + ' min' : '-'}</td>
+                    <td>${trans.completed_at ? new Date(trans.completed_at).toLocaleString() : '-'}</td>
+                </tr>
+            `;
+        }).join('');
     }
 
-    tbody.innerHTML = history.map(trans => {
-        return `
-            <tr>
-                <td>${trans.queue_number}</td>
-                <td>${trans.user_name}</td>
-                <td>${formatServiceLabel(trans.service_type)}</td>
-                <td>${formatHistoryStatusBadge(trans.status)}</td>
-                <td>${trans.wait_time_minutes ? trans.wait_time_minutes + ' min' : '-'}</td>
-                <td>${formatDateTime(trans.completed_at)}</td>
-            </tr>
-        `;
-    }).join('');
+    if (!verifyTbody) return;
+
+    if (verifications.length === 0) {
+        verifyTbody.innerHTML = '<tr><td colspan="5" class="text-center">No AI verifications yet</td></tr>';
+    } else {
+        verifyTbody.innerHTML = verifications.map(trans => {
+            // Display status with a clickable button for details
+            let statusBadge = trans.status.includes('successfully') ? 'bg-success' : 'bg-danger';
+            let statusText = trans.status.includes('successfully') ? 'Verified' : 'Flagged';
+            // ensure no quotes break the HTML handler
+            let safeMessage = trans.status.replace(/'/g, "\\'").replace(/"/g, '&quot;');
+            return `
+                <tr>
+                    <td>${trans.user_name}</td>
+                    <td>${formatServiceLabel(trans.service_type)}</td>
+                    <td><span class="badge ${statusBadge}">${statusText}</span></td>
+                    <td>
+                        <button class="btn btn-sm btn-outline-info" onclick="console.log('${safeMessage}')">
+                            <i class="bi bi-file-text"></i> View Result
+                        </button>
+                    </td>
+                    <td>${trans.completed_at ? new Date(trans.completed_at).toLocaleString() : '-'}</td>
+                </tr>
+            `;
+        }).join('');
+    }
 }
 
 // Load student dashboard
@@ -1550,10 +1694,18 @@ function loadStudentDashboard() {
     const pollStudentQueue = async () => {
         try {
             const [queueRes, servingRes] = await Promise.all([
-                fetch(`${API_BASE}/queue/my-queue`, { credentials: 'include' }),
+                fetch(`${API_BASE}/queue/my-queue?t=${Date.now()}`, { credentials: 'include' }),
                 fetch(`${API_BASE}/queue/now-serving`, { credentials: 'include' })
             ]);
             const queue = queueRes.ok ? await queueRes.json() : null;
+            if (queueRes.ok && queue) {
+                lastQueueState = true;
+            } else if (!queueRes.ok && lastQueueState) {
+                lastQueueState = false;
+                if (typeof loadStudentHistory === 'function') {
+                    loadStudentHistory();
+                }
+            }
             const servingData = servingRes.ok ? await servingRes.json() : {};
             displayMyQueue(queue);
             displayNowServing(servingData);
@@ -1662,7 +1814,7 @@ async function requestNotificationPermission() {
     if (Notification.permission !== 'default') return Notification.permission;
     if (hasPromptedNotifications()) return Notification.permission;
     if (!canRequestNotifications()) {
-        alert('Notifications require a secure (HTTPS) connection. Please open this site over HTTPS to enable alerts.');
+        console.log('Notifications require a secure (HTTPS) connection. Please open this site over HTTPS to enable alerts.');
         return 'denied';
     }
     localStorage.setItem(NOTIFICATION_PROMPT_KEY, '1');
@@ -1834,16 +1986,28 @@ function updateNowServingVisibility(myQueue) {
     }
 }
 
+let lastQueueState = false;
+
 // Load my queue
 async function loadMyQueue() {
     try {
-        const response = await fetch(`${API_BASE}/queue/my-queue`, {
+        const response = await fetch(`${API_BASE}/queue/my-queue?t=${Date.now()}`, {
             credentials: 'include'
         });
 
         if (response.ok) {
             const queue = await response.json();
             displayMyQueue(queue);
+            lastQueueState = true;
+        } else {
+            if (lastQueueState) {
+                // Queue has completed, instantly reload history to reflect changes
+                if (typeof loadStudentHistory === 'function') {
+                     loadStudentHistory();
+                }
+                lastQueueState = false;
+            }
+            displayMyQueue(null);
         }
     } catch (error) {
         console.error('Failed to load my queue:', error);
@@ -1854,6 +2018,8 @@ async function loadMyQueue() {
 function displayMyQueue(queue) {
     const statusDiv = document.getElementById('my-queue-status');
     updateNowServingVisibility(queue);
+    updateQueueControls(queue);
+
 
     if (!queue) {
         if (statusDiv) statusDiv.innerHTML = '<div class="alert alert-info">No active queue</div>';
@@ -1953,7 +2119,7 @@ async function handleJoinQueue(e) {
     const priority = document.getElementById('priority').value;
 
     if (!serviceType) {
-        alert('Please select a service');
+        console.log('Please select a service');
         return;
     }
 
@@ -1964,7 +2130,7 @@ async function handleJoinQueue(e) {
                 'Content-Type': 'application/json'
             },
             credentials: 'include',
-            body: JSON.stringify({ service_type: serviceType, priority: priority })
+            body: JSON.stringify({ service_type: serviceType, priority: priority, expected_user_id: currentUser ? currentUser.id : null })
         });
 
         const data = await response.json();
@@ -1991,10 +2157,10 @@ async function handleJoinQueue(e) {
                 loadMyQueue();
             }, 1000);
         } else {
-            alert(data.error || 'Failed to join queue');
+            console.log(data.error || 'Failed to join queue');
         }
     } catch (error) {
-        alert('Connection error. Please try again.');
+        console.log('Connection error. Please try again.');
     }
 }
 
@@ -2010,7 +2176,7 @@ async function handleVerification(e) {
     const resultDiv = document.getElementById('verification-result');
 
     if (!fileInput.files[0]) {
-        alert('Please select a file');
+        console.log('Please select a file');
         return;
     }
 
@@ -2056,9 +2222,8 @@ async function handleVerification(e) {
 // Load student history
 async function loadStudentHistory() {
     try {
-        const response = await fetch(`${API_BASE}/transactions/history`, {
-            credentials: 'include',
-            cache: 'no-store'
+        const response = await fetch(`${API_BASE}/transactions/history?t=${Date.now()}`, {
+            credentials: 'include'
         });
 
         if (response.ok) {
@@ -2139,13 +2304,13 @@ async function handleCreateAdmin(e) {
         });
         const data = await response.json();
         if (!response.ok) {
-            alert(data.error || 'Failed to create admin');
+            console.log(data.error || 'Failed to create admin');
             return;
         }
         document.getElementById('create-admin-form').reset();
         await loadAdminManagement();
     } catch (error) {
-        alert('Connection error. Please try again.');
+        console.log('Connection error. Please try again.');
     }
 }
 
@@ -2281,12 +2446,12 @@ async function updateAdminRole(adminId, adminService) {
         });
         const data = await response.json();
         if (!response.ok) {
-            alert(data.error || 'Failed to update admin role');
+            console.log(data.error || 'Failed to update admin role');
             return;
         }
         await loadAdminList();
     } catch (error) {
-        alert('Connection error. Please try again.');
+        console.log('Connection error. Please try again.');
     }
 }
 
@@ -2299,12 +2464,12 @@ async function deleteAdmin(adminId) {
         });
         const data = await response.json();
         if (!response.ok) {
-            alert(data.error || 'Failed to delete admin');
+            console.log(data.error || 'Failed to delete admin');
             return;
         }
         await loadAdminList();
     } catch (error) {
-        alert('Connection error. Please try again.');
+        console.log('Connection error. Please try again.');
     }
 }
 
@@ -2317,12 +2482,12 @@ async function deleteUser(userId) {
         });
         const data = await response.json();
         if (!response.ok) {
-            alert(data.error || 'Failed to delete user');
+            console.log(data.error || 'Failed to delete user');
             return;
         }
         await loadUserList();
     } catch (error) {
-        alert('Connection error. Please try again.');
+        console.log('Connection error. Please try again.');
     }
 }
 
@@ -2445,6 +2610,98 @@ async function updateServiceSetting(serviceType, updates) {
 
         loadServiceSettings();
     } catch (error) {
-        alert(error.message);
+        console.log(error.message);
     }
 }
+
+// Update priority/service controls based on queue state
+function updateQueueControls(queue) {
+    const regularBtn = document.querySelector('.priority-btn[data-priority="regular"]');
+    const seniorBtn = document.querySelector('.priority-btn[data-priority="senior_pwd"]');
+    const serviceBtns = document.querySelectorAll('.service-btn');
+    const submitBtn = document.querySelector('#join-queue-form button[type="submit"]');
+
+    if (!regularBtn || !seniorBtn) return;
+
+    if (queue) {
+        // User is IN a queue - lock controls and force strict styling
+        const activePriority = queue.priority || 'regular';
+        
+        if (activePriority === 'regular') {
+            regularBtn.classList.add('active');
+            regularBtn.style.backgroundColor = '#8B0000';
+            regularBtn.style.color = 'white';
+            regularBtn.style.borderColor = '#8B0000';
+            
+            seniorBtn.disabled = true;
+            seniorBtn.style.opacity = '0.5';
+            seniorBtn.style.pointerEvents = 'none';
+        } else {
+            seniorBtn.classList.add('active');
+            seniorBtn.style.backgroundColor = '#8B0000';
+            seniorBtn.style.color = 'white';
+            seniorBtn.style.borderColor = '#8B0000';
+            
+            regularBtn.disabled = true;
+            regularBtn.style.opacity = '0.5';
+            regularBtn.style.pointerEvents = 'none';
+        }
+        
+        serviceBtns.forEach(btn => {
+            if (btn.dataset.service === queue.service_type) {
+                btn.classList.add('active');
+                btn.style.backgroundColor = '#8B0000';
+                btn.style.color = 'white';
+                btn.style.borderColor = '#8B0000';
+                btn.disabled = true;
+            } else {
+                btn.disabled = true;
+                btn.style.opacity = '0.5';
+                btn.style.pointerEvents = 'none';
+                btn.classList.remove('active');
+                btn.style.backgroundColor = '';
+                btn.style.color = '';
+                btn.style.borderColor = '';
+            }
+        });
+
+        if (submitBtn) {
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'Already in a Queue';
+        }
+    } else {
+        // User NOT in a queue - unlock controls, respect manual selection
+        [regularBtn, seniorBtn].forEach(btn => {
+            btn.disabled = false;
+            btn.style.opacity = '1';
+            btn.style.pointerEvents = 'auto';
+            if (btn.classList.contains('active')) {
+                btn.style.backgroundColor = '#8B0000';
+                btn.style.color = 'white';
+            } else {
+                btn.style.backgroundColor = '';
+                btn.style.color = '';
+            }
+        });
+
+        serviceBtns.forEach(btn => {
+            btn.disabled = false;
+            btn.style.opacity = '1';
+            btn.style.pointerEvents = 'auto';
+            if (btn.classList.contains('active')) {
+                btn.style.backgroundColor = '#8B0000';
+                btn.style.color = 'white';
+            } else {
+                btn.style.backgroundColor = '';
+                btn.style.color = '';
+            }
+        });
+        
+        if (submitBtn) {
+            submitBtn.disabled = false;
+            submitBtn.textContent = 'Join Queue';
+        }
+    }
+}
+
+

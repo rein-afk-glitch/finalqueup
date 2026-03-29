@@ -96,12 +96,12 @@ if os.getenv('GOOGLE_API_KEY'):
 
 # Database connection pool
 db_config = {
-    'user': os.getenv('DB_USER', 'root'),
-    'password': os.getenv('DB_PASSWORD', ''),
-    'host': os.getenv('DB_HOST', 'localhost'),
-    'database': os.getenv('DB_NAME', 'queup_db'),
+    'user': os.getenv('DB_USER') or os.getenv('MYSQLUSER', 'root'),
+    'password': os.getenv('DB_PASSWORD') or os.getenv('MYSQLPASSWORD', ''),
+    'host': os.getenv('DB_HOST') or os.getenv('MYSQLHOST', 'localhost'),
+    'database': os.getenv('DB_NAME') or os.getenv('MYSQLDATABASE', 'queup_db'),
     'pool_name': 'queup_pool',
-    'pool_size': 5
+    'pool_size': 32
 }
 
 try:
@@ -570,19 +570,20 @@ def notify_five_away_for_service(service_type):
         if len(mixed_waiting) < 5:
             return
 
-        target_entry = mixed_waiting[4]
-        if target_entry.get('notified_five_away'):
-            return
-        service_label = target_entry.get('service_type', '').replace('_', ' ').title()
-        payload = {
-            "title": "Almost your turn!",
-            "body": f"Queue {target_entry.get('queue_number')} ({service_label}) — you're 5 away.",
-            "tag": f"queup-five-away-{target_entry.get('id')}",
-            "url": "/",
-            "vibrate": [200, 100, 200, 100, 200]
-        }
-        send_push_to_user(target_entry.get('user_id'), payload)
-        mark_queue_notified(target_entry.get('id'), 'notified_five_away')
+        for entry in waiting:
+            entry_number = parse_queue_numeric(entry.get('queue_number'))
+            if entry_number is None or entry_number > target_number:
+                continue
+            service_label = entry.get('service_type', '').replace('_', ' ').title()
+            payload = {
+                "title": "Almost your turn!",
+                "body": f"Queue {entry.get('queue_number')} ({service_label}) — you're 5 away.",
+                "tag": f"queup-five-away-{entry.get('id')}",
+                "url": "/",
+                "vibrate": [200, 100, 200, 100, 200]
+            }
+            send_push_to_user(entry.get('user_id'), payload)
+            mark_queue_notified(entry.get('id'), 'notified_five_away')
     finally:
         cursor.close()
         conn.close()
@@ -601,6 +602,10 @@ def register():
     
     if not email or not password or not name:
         return jsonify({'error': 'Email, password, and name are required'}), 400
+        
+    complexity_regex = re.compile(r'^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*(),.?":{}|<>\-_+=\[\]~`\/]).{8,}$')
+    if not complexity_regex.match(password):
+        return jsonify({'error': 'Password does not meet complexity requirements.'}), 400
     
     conn = get_db_connection()
     if not conn:
@@ -740,6 +745,10 @@ def join_queue():
         return jsonify({'error': 'Only students can join queues'}), 403
     
     data = request.json
+    expected_user_id = data.get('expected_user_id')
+    if expected_user_id and str(user['id']) != str(expected_user_id):
+        return jsonify({'error': 'Session mismatch detected. Please refresh the page.'}), 400
+        
     service_type = data.get('service_type')
     priority = data.get('priority', 'regular')
     
@@ -859,13 +868,13 @@ def get_queue_status():
             cursor.execute("""
                 SELECT * FROM queue_entries 
                 WHERE status IN ('waiting', 'called', 'serving') AND service_type = %s
-                ORDER BY created_at ASC
+                ORDER BY priority = 'senior_pwd' DESC, created_at ASC
             """, (service_type,))
         else:
             cursor.execute("""
                 SELECT * FROM queue_entries 
                 WHERE status IN ('waiting', 'called', 'serving')
-                ORDER BY created_at ASC
+                ORDER BY priority = 'senior_pwd' DESC, created_at ASC
             """)
         
         entries = cursor.fetchall()
@@ -922,6 +931,10 @@ def queue_action():
         return jsonify({'error': 'User not found'}), 404
     
     data = request.json
+    expected_user_id = data.get('expected_user_id')
+    if expected_user_id and str(user['id']) != str(expected_user_id):
+        return jsonify({'error': 'Session mismatch detected. Please refresh the page.'}), 400
+
     queue_id = data.get('queue_id')
     action = data.get('action')
     
@@ -1282,6 +1295,7 @@ def get_transaction_history():
     cursor = conn.cursor(dictionary=True)
     
     try:
+        transactions = []
         if user['role'] == 'admin':
             if user.get('admin_type') == 'appointed':
                 if not user.get('admin_service'):
@@ -1289,32 +1303,68 @@ def get_transaction_history():
                     conn.close()
                     return jsonify({'error': 'Admin service role missing'}), 403
                 cursor.execute("""
-                    SELECT * FROM transaction_history 
+                    SELECT id, user_name, service_type, queue_number, status, wait_time_minutes, completed_at, 'queue' as type 
+                    FROM transaction_history 
                     WHERE service_type = %s
                     ORDER BY completed_at DESC LIMIT 100
                 """, (user['admin_service'],))
+                transactions = list(cursor.fetchall())
             else:
                 cursor.execute("""
-                    SELECT * FROM transaction_history 
+                    SELECT id, user_name, service_type, queue_number, status, wait_time_minutes, completed_at, 'queue' as type
+                    FROM transaction_history 
                     ORDER BY completed_at DESC LIMIT 100
                 """)
+                transactions = list(cursor.fetchall())
+                
+                cursor.execute("""
+                    SELECT dv.id, u.name as user_name, dv.document_type as service_type, 
+                           'VERIFY' as queue_number, dv.verification_result as status, 
+                           NULL as wait_time_minutes, dv.created_at as completed_at, 'verification' as type
+                    FROM document_verifications dv
+                    JOIN users u ON dv.user_id = u.id
+                    ORDER BY dv.created_at DESC LIMIT 100
+                """)
+                verifications = list(cursor.fetchall())
+                transactions.extend(verifications)
         else:
             cursor.execute("""
-                SELECT * FROM transaction_history 
+                SELECT id, user_name, service_type, queue_number, status, wait_time_minutes, completed_at, 'queue' as type
+                FROM transaction_history 
                 WHERE user_id = %s 
                 ORDER BY completed_at DESC LIMIT 100
             """, (user['id'],))
-        
-        transactions = cursor.fetchall()
+            transactions = list(cursor.fetchall())
+            
+            cursor.execute("""
+                SELECT id, %s as user_name, document_type as service_type, 
+                       'VERIFY' as queue_number, verification_result as status, 
+                       NULL as wait_time_minutes, created_at as completed_at, 'verification' as type
+                FROM document_verifications 
+                WHERE user_id = %s
+                ORDER BY created_at DESC LIMIT 100
+            """, (user['name'], user['id']))
+            verifications = list(cursor.fetchall())
+            transactions.extend(verifications)
+            
+        # Sort combined list by date descending using ISO string sort logic (safe for None or dates)
+        transactions.sort(key=lambda x: str(x['completed_at']) if x['completed_at'] else '', reverse=True)
+        # Trim to 100 elements max
+        transactions = transactions[:100]
+
         cursor.close()
         conn.close()
         
         # Convert datetime objects to strings
         for trans in transactions:
             if trans.get('completed_at'):
-                trans['completed_at'] = trans['completed_at'].isoformat()
+                import datetime
+                if isinstance(trans['completed_at'], datetime.datetime):
+                    trans['completed_at'] = trans['completed_at'].isoformat()
             if trans.get('created_at'):
-                trans['created_at'] = trans['created_at'].isoformat()
+                import datetime
+                if isinstance(trans['created_at'], datetime.datetime):
+                    trans['created_at'] = trans['created_at'].isoformat()
         
         return jsonify(transactions), 200
     except mysql.connector.Error as err:
@@ -1750,13 +1800,13 @@ def serve_frontend():
 def serve_static(path):
     return send_from_directory('../simplified_frontend', path)
 
-if __name__ == '__main__':
-    with app.app_context():
-        init_db()
-        ensure_static_admin()
-        
-    os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
+with app.app_context():
+    init_db()
+    ensure_static_admin()
+    
+os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
+if __name__ == '__main__':
     port = int(os.environ.get("PORT", 5000))
     app.run(host='0.0.0.0', port=port)
 
