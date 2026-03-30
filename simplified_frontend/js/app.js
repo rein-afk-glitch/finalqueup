@@ -321,6 +321,9 @@ function setupEventListeners() {
         studentHistoryTab.addEventListener('click', () => {
              if (typeof loadStudentHistory === 'function') setTimeout(loadStudentHistory, 50);
         });
+        studentHistoryTab.addEventListener('shown.bs.tab', () => {
+             if (typeof loadStudentHistory === 'function') loadStudentHistory();
+        });
     }
     const historyPanel = document.getElementById('student-history-panel');
     if (historyPanel) {
@@ -436,11 +439,6 @@ function setupEventListeners() {
         }
     });
 
-    const studentHistoryTab = document.getElementById('student-history-tab');
-    if (studentHistoryTab) {
-        studentHistoryTab.addEventListener('shown.bs.tab', () => loadStudentHistory());
-    }
-
     // Join queue form
     document.getElementById('join-queue-form').addEventListener('submit', handleJoinQueue);
 
@@ -547,15 +545,21 @@ function setupEventListeners() {
             });
         }
 
-        // Admin service office filters
-        const adminOfficeBtn = e.target.closest('.filter-btn[id^="filter-"][id$="-group"]');
-        if (adminOfficeBtn) {
+        // Admin service office filters (Registrar / Accounting / All)
+        const adminOfficeBtn = e.target.closest('.filter-btn[id^="filter-"][id$="-group"]') || e.target.closest('#filter-all');
+        if (adminOfficeBtn && !e.target.closest('#admin-service-filters')) {
             const office = adminOfficeBtn.dataset.filter;
-            const serviceButtons = document.querySelectorAll('#admin-service-filters .filter-btn');
+            
+            // Update active state for office group
+            document.querySelectorAll('.filter-btn:not(#admin-service-filters *)').forEach(btn => {
+                const isGroupBtn = btn.id.includes('-group') || btn.id === 'filter-all';
+                if (isGroupBtn) btn.classList.toggle('active', btn === adminOfficeBtn);
+            });
 
+            const serviceButtons = document.querySelectorAll('#admin-service-filters .filter-btn');
             serviceButtons.forEach(btn => {
                 const service = btn.dataset.filter;
-                if (!service) { // "All" button
+                if (!service) { // "All Services" button
                     btn.style.display = 'block';
                     return;
                 }
@@ -571,6 +575,23 @@ function setupEventListeners() {
                     btn.style.display = 'block';
                 }
             });
+            
+            // If office changed, reset service filter to "All Services"
+            const allServicesBtn = document.getElementById('filter-all-v2');
+            if (allServicesBtn) {
+                document.querySelectorAll('#admin-service-filters .filter-btn').forEach(btn => btn.classList.remove('active'));
+                allServicesBtn.classList.add('active');
+                loadQueueList();
+            }
+        }
+
+        // Admin specific service filters (Application Forms, Claims, etc.)
+        const adminServiceFilterBtn = e.target.closest('#admin-service-filters .filter-btn');
+        if (adminServiceFilterBtn) {
+            document.querySelectorAll('#admin-service-filters .filter-btn').forEach(btn => {
+                btn.classList.toggle('active', btn === adminServiceFilterBtn);
+            });
+            loadQueueList();
         }
 
         // Sync Sidebar when clicking tabs/pills outside sidebar (like Quick Actions)
@@ -642,18 +663,33 @@ function setupEventListeners() {
             updateServiceSetting(service, { is_open: isOpen });
         }
 
+        // Sync all analytics period selectors when one is changed
+        if (e.target.id && e.target.id.startsWith('analytics-period-') && e.target.tagName === 'SELECT') {
+            const val = e.target.value;
+            ['analytics-period-served', 'analytics-period-time', 'analytics-period-peak'].forEach(id => {
+                const el = document.getElementById(id);
+                if (el && el !== e.target) el.value = val;
+            });
+        }
+
         // Save limit button
         if (e.target.closest('.save-limit-btn')) {
             const btn = e.target.closest('.save-limit-btn');
             const service = btn.dataset.service;
             const input = document.getElementById(`limit-${service}`);
             const limit = input.value === '' ? null : parseInt(input.value, 10);
-            updateServiceSetting(service, { daily_limit: limit });
+            updateServiceSetting(service, { pending_daily_limit: limit });
+            
+            // Visual feedback
+            btn.innerHTML = '<i class="bi bi-check-lg text-success"></i>';
+            setTimeout(() => { btn.innerHTML = '<i class="bi bi-save"></i>'; }, 2000);
         }
 
         // Sync button
         if (e.target.closest('.apply-settings-btn')) {
-            loadServiceSettings();
+            const btn = e.target.closest('.apply-settings-btn');
+            const service = btn.dataset.service;
+            syncServiceSetting(service);
         }
 
         // Compact admin queue actions
@@ -1268,7 +1304,6 @@ function configureAdminView() {
     const analyticsSubmenuToggle = document.querySelector('[href="#analytics-submenu"]');
     const analyticsNavItem = analyticsSubmenuToggle ? analyticsSubmenuToggle.closest('.nav-item-with-submenu') : null;
     const myAnalyticsTab = document.querySelector('[href="#my-analytics-panel"]');
-
     const overviewTab = document.querySelector('[href="#overview-panel"]');
 
     if (isStaticAdmin()) {
@@ -1319,6 +1354,23 @@ function configureAdminView() {
         }
     }
 
+    // AI Verification Security Restriction
+    const verifyTab = document.getElementById('history-verify-tab');
+    if (verifyTab) {
+        const canSeeVerifications = isStaticAdmin() || currentUser?.admin_service === 'payment';
+        if (canSeeVerifications) {
+            verifyTab.closest('.nav-item')?.classList.remove('d-none');
+        } else {
+            verifyTab.closest('.nav-item')?.classList.add('d-none');
+            // Ensure the queue logs tab is active if we are on the history panel
+            const queueTab = document.getElementById('history-queue-tab');
+            if (queueTab && !queueTab.classList.contains('active')) {
+                const tab = bootstrap.Tab.getOrCreateInstance(queueTab);
+                tab.show();
+            }
+        }
+    }
+
     const assignedService = currentUser?.admin_service;
     const filterButtons = Array.from(document.querySelectorAll('.filter-btn'));
     if (!isStaticAdmin() && assignedService) {
@@ -1360,8 +1412,8 @@ async function loadAdminStats() {
 
 // Load queue list
 async function loadQueueList() {
-    // Get active filter from button
-    const activeFilter = document.querySelector('.filter-btn.active');
+    // Get active filter from button in the service filters section
+    const activeFilter = document.querySelector('#admin-service-filters .filter-btn.active');
     let serviceType = activeFilter ? activeFilter.dataset.filter : '';
     if (currentUser?.role === 'admin' && !isStaticAdmin() && currentUser?.admin_service) {
         serviceType = currentUser.admin_service;
@@ -1486,12 +1538,18 @@ async function loadHistory() {
 // Load and display admin analytics (SuperAdmin only)
 async function loadAdminAnalytics() {
     if (!isStaticAdmin()) return;
-    // Read from whichever period selector is visible (each sub-panel has its own)
-    const periodEl =
-        document.getElementById('analytics-period-served') ||
-        document.getElementById('analytics-period-time') ||
-        document.getElementById('analytics-period-peak') ||
-        document.getElementById('analytics-period');
+    
+    // Find the currently active analytics tab's period selector
+    const activeTab = document.querySelector('.tab-pane.show.active[id^="analytics-"]');
+    let periodEl = activeTab ? activeTab.querySelector('select[id^="analytics-period-"]') : null;
+    
+    // Fallback to specific IDs if no active tab found or selector not in tab
+    if (!periodEl) {
+        periodEl = document.getElementById('analytics-period-time') || 
+                   document.getElementById('analytics-period-served') || 
+                   document.getElementById('analytics-period-peak');
+    }
+    
     const days = periodEl ? parseInt(periodEl.value, 10) : 30;
     try {
         const response = await fetch(`${API_BASE}/admin/analytics?days=${days}`, { credentials: 'include' });
@@ -1509,8 +1567,27 @@ async function loadAdminAnalytics() {
 function renderAnalyticsCharts(data) {
     let adminPerf = data.admin_performance || [];
     let peakHours = data.peak_hours || [];
-    if (adminPerf.length === 0) adminPerf = [{ admin_name: 'No data', numbers_served: 0, avg_service_minutes: 0 }];
-    if (peakHours.length === 0) peakHours = Array.from({ length: 24 }, (_, h) => ({ hour: h, hour_label: `${String(h).padStart(2, '0')}:00`, count: 0 }));
+    const hasAdminData = adminPerf.length > 0;
+    const hasPeakData = peakHours.length > 0;
+    if (!hasAdminData) adminPerf = [{ admin_name: '-', numbers_served: 0, avg_service_minutes: 0 }];
+    if (!hasPeakData) peakHours = Array.from({ length: 24 }, (_, h) => ({ hour: h, hour_label: `${String(h).padStart(2, '0')}:00`, count: 0 }));
+
+    // Plugin to draw "No data available" overlay on empty charts
+    const noDataPlugin = {
+        id: 'noDataMessage',
+        afterDraw(chart) {
+            if (chart.config.options._noData) {
+                const { ctx, width, height } = chart;
+                ctx.save();
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.font = 'bold 16px Inter, sans-serif';
+                ctx.fillStyle = 'rgba(120, 0, 0, 0.6)';
+                ctx.fillText('No data available for this period', width / 2, height / 2);
+                ctx.restore();
+            }
+        }
+    };
     const CHART_COLORS = {
         red: 'rgba(120, 0, 0, 0.8)',
         redLight: 'rgba(120, 0, 0, 0.5)',
@@ -1522,53 +1599,89 @@ function renderAnalyticsCharts(data) {
     const servedData = adminPerf.map(a => a.numbers_served || 0);
     const avgTimeData = adminPerf.map(a => parseFloat(a.avg_service_minutes) || 0);
 
+    const commonOptions = {
+        responsive: true,
+        maintainAspectRatio: true,
+        plugins: {
+            legend: { display: false },
+            tooltip: {
+                backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                padding: 12,
+                titleFont: { size: 14, weight: 'bold' },
+                bodyFont: { size: 13 },
+                displayColors: false
+            }
+        },
+        scales: {
+            y: {
+                beginAtZero: true,
+                grid: { color: 'rgba(0, 0, 0, 0.05)' },
+                ticks: { font: { size: 11, weight: '500' } }
+            },
+            x: {
+                grid: { display: false },
+                ticks: { font: { size: 11, weight: '500' } }
+            }
+        }
+    };
+
+    // Numbers Served Chart
     if (analyticsCharts.numbersServed) analyticsCharts.numbersServed.destroy();
     const ctx1 = document.getElementById('chart-numbers-served');
     if (ctx1) {
         analyticsCharts.numbersServed = new Chart(ctx1, {
             type: 'bar',
+            plugins: [noDataPlugin],
             data: {
                 labels,
                 datasets: [{
-                    label: 'Numbers Served',
+                    label: 'Served',
                     data: servedData,
                     backgroundColor: CHART_COLORS.redLight,
                     borderColor: CHART_COLORS.red,
-                    borderWidth: 2
+                    borderWidth: 2,
+                    borderRadius: 8
                 }]
             },
             options: {
-                responsive: true,
-                maintainAspectRatio: true,
-                plugins: { legend: { display: false } },
+                ...commonOptions,
+                _noData: !hasAdminData,
                 scales: {
-                    y: { beginAtZero: true, ticks: { stepSize: 1 } }
+                    ...commonOptions.scales,
+                    y: { ...commonOptions.scales.y, ticks: { ...commonOptions.scales.y.ticks, stepSize: 1 } }
                 }
             }
         });
     }
+
+    // Avg Service Time Chart
 
     if (analyticsCharts.avgServiceTime) analyticsCharts.avgServiceTime.destroy();
     const ctx2 = document.getElementById('chart-avg-service-time');
     if (ctx2) {
         analyticsCharts.avgServiceTime = new Chart(ctx2, {
             type: 'bar',
+            plugins: [noDataPlugin],
             data: {
                 labels,
                 datasets: [{
-                    label: 'Avg Service Time (min)',
+                    label: 'Avg Minutes',
                     data: avgTimeData,
                     backgroundColor: CHART_COLORS.goldLight,
                     borderColor: CHART_COLORS.gold,
-                    borderWidth: 2
+                    borderWidth: 2,
+                    borderRadius: 8
                 }]
             },
             options: {
-                responsive: true,
-                maintainAspectRatio: true,
-                plugins: { legend: { display: false } },
+                ...commonOptions,
+                _noData: !hasAdminData,
                 scales: {
-                    y: { beginAtZero: true }
+                    ...commonOptions.scales,
+                    y: { 
+                        ...commonOptions.scales.y, 
+                        title: { display: true, text: 'Minutes' } 
+                    }
                 }
             }
         });
@@ -1579,6 +1692,7 @@ function renderAnalyticsCharts(data) {
     if (ctx3) {
         analyticsCharts.peakHours = new Chart(ctx3, {
             type: 'bar',
+            plugins: [noDataPlugin],
             data: {
                 labels: peakHours.map(p => p.hour_label),
                 datasets: [{
@@ -1586,15 +1700,19 @@ function renderAnalyticsCharts(data) {
                     data: peakHours.map(p => p.count),
                     backgroundColor: CHART_COLORS.redLight,
                     borderColor: CHART_COLORS.red,
-                    borderWidth: 2
+                    borderWidth: 2,
+                    borderRadius: 8
                 }]
             },
             options: {
-                responsive: true,
-                maintainAspectRatio: true,
-                plugins: { legend: { display: false } },
+                ...commonOptions,
+                _noData: !hasPeakData,
                 scales: {
-                    y: { beginAtZero: true, ticks: { stepSize: 1 } }
+                    ...commonOptions.scales,
+                    y: { 
+                        ...commonOptions.scales.y, 
+                        ticks: { ...commonOptions.scales.y.ticks, stepSize: 1 } 
+                    }
                 }
             }
         });
@@ -1658,24 +1776,23 @@ function displayHistory(history) {
     if (!verifyTbody) return;
 
     if (verifications.length === 0) {
-        verifyTbody.innerHTML = '<tr><td colspan="5" class="text-center">No AI verifications yet</td></tr>';
+        verifyTbody.innerHTML = '<tr><td colspan="4" class="text-center">No AI verifications yet</td></tr>';
     } else {
         verifyTbody.innerHTML = verifications.map(trans => {
-            // Display status with a clickable button for details
-            let statusBadge = trans.status.includes('successfully') ? 'bg-success' : 'bg-danger';
-            let statusText = trans.status.includes('successfully') ? 'Verified' : 'Flagged';
-            // ensure no quotes break the HTML handler
-            let safeMessage = trans.status.replace(/'/g, "\\'").replace(/"/g, '&quot;');
+            // Check ai_verification_status first, then fall back to parsing the status string
+            let isVerified = trans.ai_verification_status === 'verified' 
+                || trans.ai_verification_status === true
+                || trans.status.includes('matched') 
+                || trans.status.includes('verified') 
+                || trans.status.includes('successfully') 
+                || trans.status === 'Verified';
+            let statusBadge = isVerified ? 'bg-success' : 'bg-danger';
+            let statusText = isVerified ? 'Verified' : 'Not Verified';
             return `
                 <tr>
                     <td>${trans.user_name}</td>
                     <td>${formatServiceLabel(trans.service_type)}</td>
                     <td><span class="badge ${statusBadge}">${statusText}</span></td>
-                    <td>
-                        <button class="btn btn-sm btn-outline-info" onclick="console.log('${safeMessage}')">
-                            <i class="bi bi-file-text"></i> View Result
-                        </button>
-                    </td>
                     <td>${trans.completed_at ? new Date(trans.completed_at).toLocaleString() : '-'}</td>
                 </tr>
             `;
@@ -2249,11 +2366,26 @@ function displayStudentHistory(history) {
     }
 
     tbody.innerHTML = history.map(trans => {
+        const isVerification = trans.type === 'verification';
+        let statusBadge = 'bg-success';
+        let statusText = trans.status;
+
+        if (isVerification) {
+            const isVerified = trans.ai_verification_status === 'verified'
+                || trans.ai_verification_status === true
+                || trans.status.includes('matched')
+                || trans.status.includes('verified')
+                || trans.status.includes('successfully')
+                || trans.status === 'Verified';
+            statusBadge = isVerified ? 'bg-success' : 'bg-danger';
+            statusText = isVerified ? 'Verified' : 'Not Verified';
+        }
+
         return `
             <tr>
                 <td>${trans.queue_number}</td>
                 <td>${formatServiceLabel(trans.service_type)}</td>
-                <td>${formatHistoryStatusBadge(trans.status)}</td>
+                <td><span class="badge ${statusBadge}">${statusText}</span></td>
                 <td>${trans.wait_time_minutes ? trans.wait_time_minutes + ' min' : '-'}</td>
                 <td>${formatDateTime(trans.completed_at)}</td>
             </tr>
@@ -2542,10 +2674,12 @@ function renderServiceSettings(settings) {
 
     tbody.innerHTML = filteredSettings.map(setting => {
         const isOpen = !!setting.is_open;
-        const limit = setting.daily_limit !== null ? setting.daily_limit : '';
+        // Use pending limit if it exists, otherwise use current active limit
+        const limit = setting.pending_daily_limit !== null ? setting.pending_daily_limit : (setting.daily_limit !== null ? setting.daily_limit : '');
+        const isModified = setting.pending_daily_limit !== null && setting.pending_daily_limit !== setting.daily_limit;
 
         return `
-            <tr>
+            <tr class="${isModified ? 'table-warning' : ''}">
                 <td>
                     <div class="fw-bold">${formatServiceLabel(setting.service_type)}</div>
                     <small class="text-muted">${setting.service_type}</small>
@@ -2570,13 +2704,15 @@ function renderServiceSettings(settings) {
                             id="limit-${setting.service_type}">
                         <button class="btn btn-outline-secondary save-limit-btn" 
                             type="button" 
-                            data-service="${setting.service_type}">
+                            data-service="${setting.service_type}"
+                            title="Save pending limit">
                             <i class="bi bi-save"></i>
                         </button>
                     </div>
+                    ${isModified ? `<small class="text-danger fw-bold">Pending: ${limit} (Current: ${setting.daily_limit ?? 'None'})</small>` : ''}
                 </td>
                 <td class="text-end">
-                    <button class="btn btn-sm btn-primary apply-settings-btn" data-service="${setting.service_type}">
+                    <button class="btn btn-sm btn-burgundy apply-settings-btn px-3 rounded-pill" data-service="${setting.service_type}">
                         Sync Now
                     </button>
                 </td>
@@ -2603,14 +2739,33 @@ async function updateServiceSetting(serviceType, updates) {
             body: JSON.stringify(updates)
         });
 
-        if (!response.ok) {
-            const error = await response.json();
-            throw new Error(error.error || 'Failed to update setting');
+        if (response.ok) {
+            loadServiceSettings();
+        } else {
+            const data = await response.json();
+            alert(data.error || 'Failed to update settings');
         }
-
-        loadServiceSettings();
     } catch (error) {
-        console.log(error.message);
+        console.error('Update error:', error);
+    }
+}
+
+async function syncServiceSetting(serviceType) {
+    try {
+        const response = await fetch(`${API_BASE}/admin/service-settings/${serviceType}/sync`, {
+            method: 'POST',
+            credentials: 'include'
+        });
+
+        if (response.ok) {
+            alert('Settings synced successfully!');
+            loadServiceSettings();
+        } else {
+            const data = await response.json();
+            alert(data.error || 'Failed to sync settings');
+        }
+    } catch (error) {
+        console.error('Sync error:', error);
     }
 }
 

@@ -245,9 +245,15 @@ def init_db():
                 service_type VARCHAR(50) PRIMARY KEY,
                 is_open BOOLEAN DEFAULT TRUE,
                 daily_limit INT DEFAULT NULL,
+                pending_daily_limit INT DEFAULT NULL,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
             )
         """)
+        
+        # Ensure pending_daily_limit column exists for existing databases
+        cursor.execute("SHOW COLUMNS FROM service_settings LIKE 'pending_daily_limit'")
+        if not cursor.fetchone():
+            cursor.execute("ALTER TABLE service_settings ADD COLUMN pending_daily_limit INT DEFAULT NULL")
 
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS push_subscriptions (
@@ -971,22 +977,28 @@ def queue_action():
         elif action == 'next':
             cursor.execute("""
                 UPDATE queue_entries 
-                SET status = 'serving' 
+                SET status = 'serving', 
+                    called_at = IFNULL(called_at, NOW()) 
                 WHERE id = %s
             """, (queue_id,))
         elif action == 'complete':
             # Calculate wait time (join to completion) and service time (called to completion)
             wait_time = None
             service_time = None
-            if queue_entry['called_at']:
-                cursor.execute("""
-                    SELECT TIMESTAMPDIFF(MINUTE, created_at, NOW()) as wait_time,
-                           TIMESTAMPDIFF(MINUTE, called_at, NOW()) as service_time
-                    FROM queue_entries WHERE id = %s
-                """, (queue_id,))
-                result = cursor.fetchone()
-                wait_time = result['wait_time'] if result else None
-                service_time = result['service_time'] if result else None
+            
+            # If called_at is still NULL, set it now to current time (0 min service time)
+            if not queue_entry['called_at']:
+                cursor.execute("UPDATE queue_entries SET called_at = NOW() WHERE id = %s", (queue_id,))
+                queue_entry['called_at'] = datetime.now()
+
+            cursor.execute("""
+                SELECT TIMESTAMPDIFF(MINUTE, created_at, NOW()) as wait_time,
+                       TIMESTAMPDIFF(MINUTE, called_at, NOW()) as service_time
+                FROM queue_entries WHERE id = %s
+            """, (queue_id,))
+            result = cursor.fetchone()
+            wait_time = result['wait_time'] if result else None
+            service_time = result['service_time'] if result else None
             
             # Move to transaction history
             cursor.execute("""
@@ -1160,12 +1172,21 @@ Determine if this is a valid receipt for the University of San Agustin accountin
         # Optional: Secondary verification with n8n (if configured)
         n8n_verified = False
         n8n_url = os.getenv('N8N_WEBHOOK_URL')
+        n8n_api_key = os.getenv('N8N_API_KEY')
         if n8n_url:
             try:
                 # Prepare data for n8n
                 file.seek(0)
+                
+                headers = {}
+                if n8n_api_key:
+                    # Support both common ways n8n might expect the key
+                    headers['Authorization'] = f'Bearer {n8n_api_key}'
+                    headers['X-N8N-API-KEY'] = n8n_api_key
+                    
                 n8n_response = requests.post(
                     n8n_url,
+                    headers=headers,
                     data={
                         'reference_number': reference_number,
                         'account_number': account_number,
@@ -1309,6 +1330,20 @@ def get_transaction_history():
                     ORDER BY completed_at DESC LIMIT 100
                 """, (user['admin_service'],))
                 transactions = list(cursor.fetchall())
+                
+                # Payment Admin also gets to see ALL AI Verifications
+                if user.get('admin_service') == 'payment':
+                    cursor.execute("""
+                        SELECT dv.id, u.name as user_name, dv.document_type as service_type, 
+                               'VERIFY' as queue_number, dv.verification_result as status, 
+                               CASE WHEN dv.confidence_score >= 50 OR dv.verification_result LIKE '%%matched%%' OR dv.verification_result LIKE '%%verified%%' OR dv.verification_result LIKE '%%successfully%%' THEN 'verified' ELSE 'not_verified' END as ai_verification_status,
+                               NULL as wait_time_minutes, dv.created_at as completed_at, 'verification' as type
+                        FROM document_verifications dv
+                        JOIN users u ON dv.user_id = u.id
+                        ORDER BY dv.created_at DESC LIMIT 100
+                    """)
+                    verifications = list(cursor.fetchall())
+                    transactions.extend(verifications)
             else:
                 cursor.execute("""
                     SELECT id, user_name, service_type, queue_number, status, wait_time_minutes, completed_at, 'queue' as type
@@ -1320,6 +1355,7 @@ def get_transaction_history():
                 cursor.execute("""
                     SELECT dv.id, u.name as user_name, dv.document_type as service_type, 
                            'VERIFY' as queue_number, dv.verification_result as status, 
+                           CASE WHEN dv.confidence_score >= 50 OR dv.verification_result LIKE '%%matched%%' OR dv.verification_result LIKE '%%verified%%' OR dv.verification_result LIKE '%%successfully%%' THEN 'verified' ELSE 'not_verified' END as ai_verification_status,
                            NULL as wait_time_minutes, dv.created_at as completed_at, 'verification' as type
                     FROM document_verifications dv
                     JOIN users u ON dv.user_id = u.id
@@ -1459,10 +1495,12 @@ def get_admin_analytics():
             SELECT 
                 served_by as admin_name,
                 COUNT(*) as numbers_served,
-                ROUND(AVG(COALESCE(service_time_minutes, wait_time_minutes)), 1) as avg_service_minutes
+                ROUND(AVG(service_time_minutes), 1) as avg_service_minutes
             FROM transaction_history
             WHERE served_by IS NOT NULL 
               AND served_by != ''
+              AND status = 'completed'
+              AND service_time_minutes IS NOT NULL
               AND completed_at >= DATE_SUB(CURDATE(), INTERVAL %s DAY)
             GROUP BY served_by
             ORDER BY numbers_served DESC
@@ -1768,9 +1806,12 @@ def update_service_settings(service_type):
         if is_open is not None:
             updates.append("is_open = %s")
             params.append(is_open)
-        if 'daily_limit' in data: # Allow setting to None/null
+        if 'daily_limit' in data: # Active daily limit (can still be set directly if needed)
             updates.append("daily_limit = %s")
             params.append(daily_limit)
+        if 'pending_daily_limit' in data: # Pending limit from "Save" button
+            updates.append("pending_daily_limit = %s")
+            params.append(data.get('pending_daily_limit'))
             
         if not updates:
             return jsonify({'error': 'No updates provided'}), 400
@@ -1781,6 +1822,46 @@ def update_service_settings(service_type):
         cursor.close()
         conn.close()
         return jsonify({'message': 'Settings updated successfully'}), 200
+    except mysql.connector.Error as err:
+        if conn:
+            conn.rollback()
+            conn.close()
+        return jsonify({'error': str(err)}), 500
+
+@app.route('/api/admin/service-settings/<service_type>/sync', methods=['POST'])
+@require_auth
+@require_admin
+def sync_service_settings(service_type):
+    user = get_current_user()
+    if not user:
+        return jsonify({'error': 'User not found'}), 404
+        
+    if user.get('admin_type') == 'appointed' and user.get('admin_service') != service_type:
+        return jsonify({'error': 'Not authorized for this service'}), 403
+        
+    conn = get_db_connection()
+    if not conn:
+        return jsonify({'error': 'Database connection failed'}), 500
+    cursor = conn.cursor(dictionary=True)
+    try:
+        # Check if service exists
+        cursor.execute("SELECT pending_daily_limit FROM service_settings WHERE service_type = %s", (service_type,))
+        row = cursor.fetchone()
+        if not row:
+            cursor.close()
+            conn.close()
+            return jsonify({'error': 'Service not found'}), 404
+            
+        # Sync pending to active
+        cursor.execute("""
+            UPDATE service_settings 
+            SET daily_limit = pending_daily_limit 
+            WHERE service_type = %s
+        """, (service_type,))
+        conn.commit()
+        cursor.close()
+        conn.close()
+        return jsonify({'message': 'Settings synced successfully'}), 200
     except mysql.connector.Error as err:
         if conn:
             conn.rollback()
