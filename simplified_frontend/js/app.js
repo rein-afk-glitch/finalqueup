@@ -600,6 +600,15 @@ function setupEventListeners() {
             updateServiceSetting(service, { is_open: isOpen });
         }
 
+        // Sync all analytics period selectors when one is changed
+        if (e.target.id && e.target.id.startsWith('analytics-period-') && e.target.tagName === 'SELECT') {
+            const val = e.target.value;
+            ['analytics-period-served', 'analytics-period-time', 'analytics-period-peak'].forEach(id => {
+                const el = document.getElementById(id);
+                if (el && el !== e.target) el.value = val;
+            });
+        }
+
         // Save limit button
         if (e.target.closest('.save-limit-btn')) {
             const btn = e.target.closest('.save-limit-btn');
@@ -1391,12 +1400,18 @@ async function loadHistory() {
 // Load and display admin analytics (SuperAdmin only)
 async function loadAdminAnalytics() {
     if (!isStaticAdmin()) return;
-    // Read from whichever period selector is visible (each sub-panel has its own)
-    const periodEl =
-        document.getElementById('analytics-period-served') ||
-        document.getElementById('analytics-period-time') ||
-        document.getElementById('analytics-period-peak') ||
-        document.getElementById('analytics-period');
+    
+    // Find the currently active analytics tab's period selector
+    const activeTab = document.querySelector('.tab-pane.show.active[id^="analytics-"]');
+    let periodEl = activeTab ? activeTab.querySelector('select[id^="analytics-period-"]') : null;
+    
+    // Fallback to specific IDs if no active tab found or selector not in tab
+    if (!periodEl) {
+        periodEl = document.getElementById('analytics-period-time') || 
+                   document.getElementById('analytics-period-served') || 
+                   document.getElementById('analytics-period-peak');
+    }
+    
     const days = periodEl ? parseInt(periodEl.value, 10) : 30;
     try {
         const response = await fetch(`${API_BASE}/admin/analytics?days=${days}`, { credentials: 'include' });
@@ -1427,6 +1442,33 @@ function renderAnalyticsCharts(data) {
     const servedData = adminPerf.map(a => a.numbers_served || 0);
     const avgTimeData = adminPerf.map(a => parseFloat(a.avg_service_minutes) || 0);
 
+    const commonOptions = {
+        responsive: true,
+        maintainAspectRatio: true,
+        plugins: {
+            legend: { display: false },
+            tooltip: {
+                backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                padding: 12,
+                titleFont: { size: 14, weight: 'bold' },
+                bodyFont: { size: 13 },
+                displayColors: false
+            }
+        },
+        scales: {
+            y: {
+                beginAtZero: true,
+                grid: { color: 'rgba(0, 0, 0, 0.05)' },
+                ticks: { font: { size: 11, weight: '500' } }
+            },
+            x: {
+                grid: { display: false },
+                ticks: { font: { size: 11, weight: '500' } }
+            }
+        }
+    };
+
+    // Numbers Served Chart
     if (analyticsCharts.numbersServed) analyticsCharts.numbersServed.destroy();
     const ctx1 = document.getElementById('chart-numbers-served');
     if (ctx1) {
@@ -1435,23 +1477,25 @@ function renderAnalyticsCharts(data) {
             data: {
                 labels,
                 datasets: [{
-                    label: 'Numbers Served',
+                    label: 'Served',
                     data: servedData,
                     backgroundColor: CHART_COLORS.redLight,
                     borderColor: CHART_COLORS.red,
-                    borderWidth: 2
+                    borderWidth: 2,
+                    borderRadius: 8
                 }]
             },
             options: {
-                responsive: true,
-                maintainAspectRatio: true,
-                plugins: { legend: { display: false } },
+                ...commonOptions,
                 scales: {
-                    y: { beginAtZero: true, ticks: { stepSize: 1 } }
+                    ...commonOptions.scales,
+                    y: { ...commonOptions.scales.y, ticks: { ...commonOptions.scales.y.ticks, stepSize: 1 } }
                 }
             }
         });
     }
+
+    // Avg Service Time Chart
 
     if (analyticsCharts.avgServiceTime) analyticsCharts.avgServiceTime.destroy();
     const ctx2 = document.getElementById('chart-avg-service-time');
@@ -1461,19 +1505,22 @@ function renderAnalyticsCharts(data) {
             data: {
                 labels,
                 datasets: [{
-                    label: 'Avg Service Time (min)',
+                    label: 'Avg Minutes',
                     data: avgTimeData,
                     backgroundColor: CHART_COLORS.goldLight,
                     borderColor: CHART_COLORS.gold,
-                    borderWidth: 2
+                    borderWidth: 2,
+                    borderRadius: 8
                 }]
             },
             options: {
-                responsive: true,
-                maintainAspectRatio: true,
-                plugins: { legend: { display: false } },
+                ...commonOptions,
                 scales: {
-                    y: { beginAtZero: true }
+                    ...commonOptions.scales,
+                    y: { 
+                        ...commonOptions.scales.y, 
+                        title: { display: true, text: 'Minutes' } 
+                    }
                 }
             }
         });
@@ -1491,15 +1538,18 @@ function renderAnalyticsCharts(data) {
                     data: peakHours.map(p => p.count),
                     backgroundColor: CHART_COLORS.redLight,
                     borderColor: CHART_COLORS.red,
-                    borderWidth: 2
+                    borderWidth: 2,
+                    borderRadius: 8
                 }]
             },
             options: {
-                responsive: true,
-                maintainAspectRatio: true,
-                plugins: { legend: { display: false } },
+                ...commonOptions,
                 scales: {
-                    y: { beginAtZero: true, ticks: { stepSize: 1 } }
+                    ...commonOptions.scales,
+                    y: { 
+                        ...commonOptions.scales.y, 
+                        ticks: { ...commonOptions.scales.y.ticks, stepSize: 1 } 
+                    }
                 }
             }
         });

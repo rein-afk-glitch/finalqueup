@@ -1412,10 +1412,12 @@ def get_admin_analytics():
             SELECT 
                 served_by as admin_name,
                 COUNT(*) as numbers_served,
-                ROUND(AVG(COALESCE(service_time_minutes, wait_time_minutes)), 1) as avg_service_minutes
+                ROUND(AVG(service_time_minutes), 1) as avg_service_minutes
             FROM transaction_history
             WHERE served_by IS NOT NULL 
               AND served_by != ''
+              AND status = 'completed'
+              AND service_time_minutes IS NOT NULL
               AND completed_at >= DATE_SUB(CURDATE(), INTERVAL %s DAY)
             GROUP BY served_by
             ORDER BY numbers_served DESC
