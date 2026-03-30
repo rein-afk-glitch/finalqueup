@@ -1274,6 +1274,7 @@ def get_transaction_history():
                     cursor.execute("""
                         SELECT dv.id, u.name as user_name, dv.document_type as service_type, 
                                'VERIFY' as queue_number, dv.verification_result as status, 
+                               CASE WHEN dv.verification_result LIKE '%%successfully%%' THEN 'verified' ELSE 'not_verified' END as ai_verification_status,
                                NULL as wait_time_minutes, dv.created_at as completed_at, 'verification' as type
                         FROM document_verifications dv
                         JOIN users u ON dv.user_id = u.id
@@ -1292,6 +1293,7 @@ def get_transaction_history():
                 cursor.execute("""
                     SELECT dv.id, u.name as user_name, dv.document_type as service_type, 
                            'VERIFY' as queue_number, dv.verification_result as status, 
+                           CASE WHEN dv.verification_result LIKE '%%successfully%%' THEN 'verified' ELSE 'not_verified' END as ai_verification_status,
                            NULL as wait_time_minutes, dv.created_at as completed_at, 'verification' as type
                     FROM document_verifications dv
                     JOIN users u ON dv.user_id = u.id

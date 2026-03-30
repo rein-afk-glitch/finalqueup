@@ -1627,25 +1627,21 @@ function displayHistory(history) {
     if (!verifyTbody) return;
 
     if (verifications.length === 0) {
-        verifyTbody.innerHTML = '<tr><td colspan="5" class="text-center">No AI verifications yet</td></tr>';
+        verifyTbody.innerHTML = '<tr><td colspan="4" class="text-center">No AI verifications yet</td></tr>';
     } else {
         verifyTbody.innerHTML = verifications.map(trans => {
-            // Display status with a clickable button for details
-            let isVerified = trans.status.includes('successfully') || trans.status === 'Verified';
+            // Check ai_verification_status first, then fall back to parsing the status string
+            let isVerified = trans.ai_verification_status === 'verified' 
+                || trans.ai_verification_status === true
+                || trans.status.includes('successfully') 
+                || trans.status === 'Verified';
             let statusBadge = isVerified ? 'bg-success' : 'bg-danger';
             let statusText = isVerified ? 'Verified' : 'Not Verified';
-            // ensure no quotes break the HTML handler
-            let safeMessage = trans.status.replace(/'/g, "\\'").replace(/"/g, '&quot;');
             return `
                 <tr>
                     <td>${trans.user_name}</td>
                     <td>${formatServiceLabel(trans.service_type)}</td>
                     <td><span class="badge ${statusBadge}">${statusText}</span></td>
-                    <td>
-                        <button class="btn btn-sm btn-outline-info" onclick="console.log('${safeMessage}')">
-                            <i class="bi bi-file-text"></i> View Result
-                        </button>
-                    </td>
                     <td>${trans.completed_at ? new Date(trans.completed_at).toLocaleString() : '-'}</td>
                 </tr>
             `;
