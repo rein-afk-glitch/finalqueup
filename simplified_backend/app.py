@@ -941,22 +941,28 @@ def queue_action():
         elif action == 'next':
             cursor.execute("""
                 UPDATE queue_entries 
-                SET status = 'serving' 
+                SET status = 'serving', 
+                    called_at = IFNULL(called_at, NOW()) 
                 WHERE id = %s
             """, (queue_id,))
         elif action == 'complete':
             # Calculate wait time (join to completion) and service time (called to completion)
             wait_time = None
             service_time = None
-            if queue_entry['called_at']:
-                cursor.execute("""
-                    SELECT TIMESTAMPDIFF(MINUTE, created_at, NOW()) as wait_time,
-                           TIMESTAMPDIFF(MINUTE, called_at, NOW()) as service_time
-                    FROM queue_entries WHERE id = %s
-                """, (queue_id,))
-                result = cursor.fetchone()
-                wait_time = result['wait_time'] if result else None
-                service_time = result['service_time'] if result else None
+            
+            # If called_at is still NULL, set it now to current time (0 min service time)
+            if not queue_entry['called_at']:
+                cursor.execute("UPDATE queue_entries SET called_at = NOW() WHERE id = %s", (queue_id,))
+                queue_entry['called_at'] = datetime.now()
+
+            cursor.execute("""
+                SELECT TIMESTAMPDIFF(MINUTE, created_at, NOW()) as wait_time,
+                       TIMESTAMPDIFF(MINUTE, called_at, NOW()) as service_time
+                FROM queue_entries WHERE id = %s
+            """, (queue_id,))
+            result = cursor.fetchone()
+            wait_time = result['wait_time'] if result else None
+            service_time = result['service_time'] if result else None
             
             # Move to transaction history
             cursor.execute("""

@@ -1445,8 +1445,27 @@ async function loadAdminAnalytics() {
 function renderAnalyticsCharts(data) {
     let adminPerf = data.admin_performance || [];
     let peakHours = data.peak_hours || [];
-    if (adminPerf.length === 0) adminPerf = [{ admin_name: 'No data', numbers_served: 0, avg_service_minutes: 0 }];
-    if (peakHours.length === 0) peakHours = Array.from({ length: 24 }, (_, h) => ({ hour: h, hour_label: `${String(h).padStart(2, '0')}:00`, count: 0 }));
+    const hasAdminData = adminPerf.length > 0;
+    const hasPeakData = peakHours.length > 0;
+    if (!hasAdminData) adminPerf = [{ admin_name: '-', numbers_served: 0, avg_service_minutes: 0 }];
+    if (!hasPeakData) peakHours = Array.from({ length: 24 }, (_, h) => ({ hour: h, hour_label: `${String(h).padStart(2, '0')}:00`, count: 0 }));
+
+    // Plugin to draw "No data available" overlay on empty charts
+    const noDataPlugin = {
+        id: 'noDataMessage',
+        afterDraw(chart) {
+            if (chart.config.options._noData) {
+                const { ctx, width, height } = chart;
+                ctx.save();
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.font = 'bold 16px Inter, sans-serif';
+                ctx.fillStyle = 'rgba(120, 0, 0, 0.6)';
+                ctx.fillText('No data available for this period', width / 2, height / 2);
+                ctx.restore();
+            }
+        }
+    };
     const CHART_COLORS = {
         red: 'rgba(120, 0, 0, 0.8)',
         redLight: 'rgba(120, 0, 0, 0.5)',
@@ -1490,6 +1509,7 @@ function renderAnalyticsCharts(data) {
     if (ctx1) {
         analyticsCharts.numbersServed = new Chart(ctx1, {
             type: 'bar',
+            plugins: [noDataPlugin],
             data: {
                 labels,
                 datasets: [{
@@ -1503,6 +1523,7 @@ function renderAnalyticsCharts(data) {
             },
             options: {
                 ...commonOptions,
+                _noData: !hasAdminData,
                 scales: {
                     ...commonOptions.scales,
                     y: { ...commonOptions.scales.y, ticks: { ...commonOptions.scales.y.ticks, stepSize: 1 } }
@@ -1518,6 +1539,7 @@ function renderAnalyticsCharts(data) {
     if (ctx2) {
         analyticsCharts.avgServiceTime = new Chart(ctx2, {
             type: 'bar',
+            plugins: [noDataPlugin],
             data: {
                 labels,
                 datasets: [{
@@ -1531,6 +1553,7 @@ function renderAnalyticsCharts(data) {
             },
             options: {
                 ...commonOptions,
+                _noData: !hasAdminData,
                 scales: {
                     ...commonOptions.scales,
                     y: { 
@@ -1547,6 +1570,7 @@ function renderAnalyticsCharts(data) {
     if (ctx3) {
         analyticsCharts.peakHours = new Chart(ctx3, {
             type: 'bar',
+            plugins: [noDataPlugin],
             data: {
                 labels: peakHours.map(p => p.hour_label),
                 datasets: [{
@@ -1560,6 +1584,7 @@ function renderAnalyticsCharts(data) {
             },
             options: {
                 ...commonOptions,
+                _noData: !hasPeakData,
                 scales: {
                     ...commonOptions.scales,
                     y: { 
