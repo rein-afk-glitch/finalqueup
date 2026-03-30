@@ -445,3 +445,34 @@
         display: none !important;
     }
 }
+
+/* Service Control & Filter Styles */
+.btn-burgundy {
+    background-color: #780000 !important;
+    color: white !important;
+    border: none;
+    transition: background-color 0.3s ease;
+}
+
+.btn-burgundy:hover {
+    background-color: #5a0000 !important;
+    color: white !important;
+}
+
+.btn-outline-burgundy {
+    color: #780000 !important;
+    border: 1.5px solid #780000 !important;
+    background-color: transparent !important;
+    font-weight: 600 !important;
+}
+
+.btn-outline-burgundy:hover, .btn-outline-burgundy.active {
+    background-color: #780000 !important;
+    color: white !important;
+}
+
+.filter-btn.active.rounded-pill {
+    background-color: #780000 !important;
+    color: white !important;
+    border-color: #780000 !important;
+}

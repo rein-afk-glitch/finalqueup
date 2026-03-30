@@ -482,15 +482,21 @@ function setupEventListeners() {
             });
         }
 
-        // Admin service office filters
-        const adminOfficeBtn = e.target.closest('.filter-btn[id^="filter-"][id$="-group"]');
-        if (adminOfficeBtn) {
+        // Admin service office filters (Registrar / Accounting / All)
+        const adminOfficeBtn = e.target.closest('.filter-btn[id^="filter-"][id$="-group"]') || e.target.closest('#filter-all');
+        if (adminOfficeBtn && !e.target.closest('#admin-service-filters')) {
             const office = adminOfficeBtn.dataset.filter;
-            const serviceButtons = document.querySelectorAll('#admin-service-filters .filter-btn');
+            
+            // Update active state for office group
+            document.querySelectorAll('.filter-btn:not(#admin-service-filters *)').forEach(btn => {
+                const isGroupBtn = btn.id.includes('-group') || btn.id === 'filter-all';
+                if (isGroupBtn) btn.classList.toggle('active', btn === adminOfficeBtn);
+            });
 
+            const serviceButtons = document.querySelectorAll('#admin-service-filters .filter-btn');
             serviceButtons.forEach(btn => {
                 const service = btn.dataset.filter;
-                if (!service) { // "All" button
+                if (!service) { // "All Services" button
                     btn.style.display = 'block';
                     return;
                 }
@@ -506,6 +512,23 @@ function setupEventListeners() {
                     btn.style.display = 'block';
                 }
             });
+            
+            // If office changed, reset service filter to "All Services"
+            const allServicesBtn = document.getElementById('filter-all-v2');
+            if (allServicesBtn) {
+                document.querySelectorAll('#admin-service-filters .filter-btn').forEach(btn => btn.classList.remove('active'));
+                allServicesBtn.classList.add('active');
+                loadQueueList();
+            }
+        }
+
+        // Admin specific service filters (Application Forms, Claims, etc.)
+        const adminServiceFilterBtn = e.target.closest('#admin-service-filters .filter-btn');
+        if (adminServiceFilterBtn) {
+            document.querySelectorAll('#admin-service-filters .filter-btn').forEach(btn => {
+                btn.classList.toggle('active', btn === adminServiceFilterBtn);
+            });
+            loadQueueList();
         }
 
         // Sync Sidebar when clicking tabs/pills outside sidebar (like Quick Actions)
@@ -583,12 +606,18 @@ function setupEventListeners() {
             const service = btn.dataset.service;
             const input = document.getElementById(`limit-${service}`);
             const limit = input.value === '' ? null : parseInt(input.value, 10);
-            updateServiceSetting(service, { daily_limit: limit });
+            updateServiceSetting(service, { pending_daily_limit: limit });
+            
+            // Visual feedback
+            btn.innerHTML = '<i class="bi bi-check-lg text-success"></i>';
+            setTimeout(() => { btn.innerHTML = '<i class="bi bi-save"></i>'; }, 2000);
         }
 
         // Sync button
         if (e.target.closest('.apply-settings-btn')) {
-            loadServiceSettings();
+            const btn = e.target.closest('.apply-settings-btn');
+            const service = btn.dataset.service;
+            syncServiceSetting(service);
         }
 
         // Compact admin queue actions
@@ -1237,8 +1266,8 @@ async function loadAdminStats() {
 
 // Load queue list
 async function loadQueueList() {
-    // Get active filter from button
-    const activeFilter = document.querySelector('.filter-btn.active');
+    // Get active filter from button in the service filters section
+    const activeFilter = document.querySelector('#admin-service-filters .filter-btn.active');
     let serviceType = activeFilter ? activeFilter.dataset.filter : '';
     if (currentUser?.role === 'admin' && !isStaticAdmin() && currentUser?.admin_service) {
         serviceType = currentUser.admin_service;
@@ -2387,10 +2416,12 @@ function renderServiceSettings(settings) {
 
     tbody.innerHTML = filteredSettings.map(setting => {
         const isOpen = !!setting.is_open;
-        const limit = setting.daily_limit !== null ? setting.daily_limit : '';
+        // Use pending limit if it exists, otherwise use current active limit
+        const limit = setting.pending_daily_limit !== null ? setting.pending_daily_limit : (setting.daily_limit !== null ? setting.daily_limit : '');
+        const isModified = setting.pending_daily_limit !== null && setting.pending_daily_limit !== setting.daily_limit;
 
         return `
-            <tr>
+            <tr class="${isModified ? 'table-warning' : ''}">
                 <td>
                     <div class="fw-bold">${formatServiceLabel(setting.service_type)}</div>
                     <small class="text-muted">${setting.service_type}</small>
@@ -2415,13 +2446,15 @@ function renderServiceSettings(settings) {
                             id="limit-${setting.service_type}">
                         <button class="btn btn-outline-secondary save-limit-btn" 
                             type="button" 
-                            data-service="${setting.service_type}">
+                            data-service="${setting.service_type}"
+                            title="Save pending limit">
                             <i class="bi bi-save"></i>
                         </button>
                     </div>
+                    ${isModified ? `<small class="text-danger fw-bold">Pending: ${limit} (Current: ${setting.daily_limit ?? 'None'})</small>` : ''}
                 </td>
                 <td class="text-end">
-                    <button class="btn btn-sm btn-primary apply-settings-btn" data-service="${setting.service_type}">
+                    <button class="btn btn-sm btn-burgundy apply-settings-btn px-3 rounded-pill" data-service="${setting.service_type}">
                         Sync Now
                     </button>
                 </td>
@@ -2448,14 +2481,33 @@ async function updateServiceSetting(serviceType, updates) {
             body: JSON.stringify(updates)
         });
 
-        if (!response.ok) {
-            const error = await response.json();
-            throw new Error(error.error || 'Failed to update setting');
+        if (response.ok) {
+            loadServiceSettings();
+        } else {
+            const data = await response.json();
+            alert(data.error || 'Failed to update settings');
         }
-
-        loadServiceSettings();
     } catch (error) {
-        console.log(error.message);
+        console.error('Update error:', error);
+    }
+}
+
+async function syncServiceSetting(serviceType) {
+    try {
+        const response = await fetch(`${API_BASE}/admin/service-settings/${serviceType}/sync`, {
+            method: 'POST',
+            credentials: 'include'
+        });
+
+        if (response.ok) {
+            alert('Settings synced successfully!');
+            loadServiceSettings();
+        } else {
+            const data = await response.json();
+            alert(data.error || 'Failed to sync settings');
+        }
+    } catch (error) {
+        console.error('Sync error:', error);
     }
 }
 

@@ -245,9 +245,15 @@ def init_db():
                 service_type VARCHAR(50) PRIMARY KEY,
                 is_open BOOLEAN DEFAULT TRUE,
                 daily_limit INT DEFAULT NULL,
+                pending_daily_limit INT DEFAULT NULL,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
             )
         """)
+        
+        # Ensure pending_daily_limit column exists for existing databases
+        cursor.execute("SHOW COLUMNS FROM service_settings LIKE 'pending_daily_limit'")
+        if not cursor.fetchone():
+            cursor.execute("ALTER TABLE service_settings ADD COLUMN pending_daily_limit INT DEFAULT NULL")
 
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS push_subscriptions (
@@ -1715,9 +1721,12 @@ def update_service_settings(service_type):
         if is_open is not None:
             updates.append("is_open = %s")
             params.append(is_open)
-        if 'daily_limit' in data: # Allow setting to None/null
+        if 'daily_limit' in data: # Active daily limit (can still be set directly if needed)
             updates.append("daily_limit = %s")
             params.append(daily_limit)
+        if 'pending_daily_limit' in data: # Pending limit from "Save" button
+            updates.append("pending_daily_limit = %s")
+            params.append(data.get('pending_daily_limit'))
             
         if not updates:
             return jsonify({'error': 'No updates provided'}), 400
@@ -1728,6 +1737,46 @@ def update_service_settings(service_type):
         cursor.close()
         conn.close()
         return jsonify({'message': 'Settings updated successfully'}), 200
+    except mysql.connector.Error as err:
+        if conn:
+            conn.rollback()
+            conn.close()
+        return jsonify({'error': str(err)}), 500
+
+@app.route('/api/admin/service-settings/<service_type>/sync', methods=['POST'])
+@require_auth
+@require_admin
+def sync_service_settings(service_type):
+    user = get_current_user()
+    if not user:
+        return jsonify({'error': 'User not found'}), 404
+        
+    if user.get('admin_type') == 'appointed' and user.get('admin_service') != service_type:
+        return jsonify({'error': 'Not authorized for this service'}), 403
+        
+    conn = get_db_connection()
+    if not conn:
+        return jsonify({'error': 'Database connection failed'}), 500
+    cursor = conn.cursor(dictionary=True)
+    try:
+        # Check if service exists
+        cursor.execute("SELECT pending_daily_limit FROM service_settings WHERE service_type = %s", (service_type,))
+        row = cursor.fetchone()
+        if not row:
+            cursor.close()
+            conn.close()
+            return jsonify({'error': 'Service not found'}), 404
+            
+        # Sync pending to active
+        cursor.execute("""
+            UPDATE service_settings 
+            SET daily_limit = pending_daily_limit 
+            WHERE service_type = %s
+        """, (service_type,))
+        conn.commit()
+        cursor.close()
+        conn.close()
+        return jsonify({'message': 'Settings synced successfully'}), 200
     except mysql.connector.Error as err:
         if conn:
             conn.rollback()
