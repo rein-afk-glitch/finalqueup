@@ -1183,7 +1183,6 @@ function configureAdminView() {
     const analyticsSubmenuToggle = document.querySelector('[href="#analytics-submenu"]');
     const analyticsNavItem = analyticsSubmenuToggle ? analyticsSubmenuToggle.closest('.nav-item-with-submenu') : null;
     const myAnalyticsTab = document.querySelector('[href="#my-analytics-panel"]');
-
     const overviewTab = document.querySelector('[href="#overview-panel"]');
 
     if (isStaticAdmin()) {
@@ -1231,6 +1230,23 @@ function configureAdminView() {
         if (overviewTab) {
             const tab = new bootstrap.Tab(overviewTab);
             tab.show();
+        }
+    }
+
+    // AI Verification Security Restriction
+    const verifyTab = document.getElementById('history-verify-tab');
+    if (verifyTab) {
+        const canSeeVerifications = isStaticAdmin() || currentUser?.admin_service === 'payment';
+        if (canSeeVerifications) {
+            verifyTab.closest('.nav-item')?.classList.remove('d-none');
+        } else {
+            verifyTab.closest('.nav-item')?.classList.add('d-none');
+            // Ensure the queue logs tab is active if we are on the history panel
+            const queueTab = document.getElementById('history-queue-tab');
+            if (queueTab && !queueTab.classList.contains('active')) {
+                const tab = bootstrap.Tab.getOrCreateInstance(queueTab);
+                tab.show();
+            }
         }
     }
 
@@ -1590,8 +1606,9 @@ function displayHistory(history) {
     } else {
         verifyTbody.innerHTML = verifications.map(trans => {
             // Display status with a clickable button for details
-            let statusBadge = trans.status.includes('successfully') ? 'bg-success' : 'bg-danger';
-            let statusText = trans.status.includes('successfully') ? 'Verified' : 'Flagged';
+            let isVerified = trans.status.includes('successfully') || trans.status === 'Verified';
+            let statusBadge = isVerified ? 'bg-success' : 'bg-danger';
+            let statusText = isVerified ? 'Verified' : 'Not Verified';
             // ensure no quotes break the HTML handler
             let safeMessage = trans.status.replace(/'/g, "\\'").replace(/"/g, '&quot;');
             return `
@@ -2173,11 +2190,21 @@ function displayStudentHistory(history) {
     }
 
     tbody.innerHTML = history.map(trans => {
+        const isVerification = trans.type === 'verification';
+        let statusBadge = 'bg-success';
+        let statusText = trans.status;
+
+        if (isVerification) {
+            const isVerified = trans.status.includes('successfully') || trans.status === 'Verified';
+            statusBadge = isVerified ? 'bg-success' : 'bg-danger';
+            statusText = isVerified ? 'Verified' : 'Not Verified';
+        }
+
         return `
             <tr>
                 <td>${trans.queue_number}</td>
                 <td>${formatServiceLabel(trans.service_type)}</td>
-                <td><span class="badge bg-success">${trans.status}</span></td>
+                <td><span class="badge ${statusBadge}">${statusText}</span></td>
                 <td>${trans.wait_time_minutes ? trans.wait_time_minutes + ' min' : '-'}</td>
                 <td>${trans.completed_at ? (function (d) { try { let date = new Date(d); if (isNaN(date.getTime())) { date = new Date(d.replace(' ', 'T')); } return date.toLocaleString(); } catch (e) { return d; } })(trans.completed_at) : '-'}</td>
             </tr>
