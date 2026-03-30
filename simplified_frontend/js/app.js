@@ -1633,6 +1633,8 @@ function displayHistory(history) {
             // Check ai_verification_status first, then fall back to parsing the status string
             let isVerified = trans.ai_verification_status === 'verified' 
                 || trans.ai_verification_status === true
+                || trans.status.includes('matched') 
+                || trans.status.includes('verified') 
                 || trans.status.includes('successfully') 
                 || trans.status === 'Verified';
             let statusBadge = isVerified ? 'bg-success' : 'bg-danger';
@@ -2216,7 +2218,12 @@ function displayStudentHistory(history) {
         let statusText = trans.status;
 
         if (isVerification) {
-            const isVerified = trans.status.includes('successfully') || trans.status === 'Verified';
+            const isVerified = trans.ai_verification_status === 'verified'
+                || trans.ai_verification_status === true
+                || trans.status.includes('matched')
+                || trans.status.includes('verified')
+                || trans.status.includes('successfully')
+                || trans.status === 'Verified';
             statusBadge = isVerified ? 'bg-success' : 'bg-danger';
             statusText = isVerified ? 'Verified' : 'Not Verified';
         }
