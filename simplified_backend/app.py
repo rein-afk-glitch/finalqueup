@@ -1262,6 +1262,19 @@ def get_transaction_history():
                     ORDER BY completed_at DESC LIMIT 100
                 """, (user['admin_service'],))
                 transactions = list(cursor.fetchall())
+                
+                # Payment Admin also gets to see ALL AI Verifications
+                if user.get('admin_service') == 'payment':
+                    cursor.execute("""
+                        SELECT dv.id, u.name as user_name, dv.document_type as service_type, 
+                               'VERIFY' as queue_number, dv.verification_result as status, 
+                               NULL as wait_time_minutes, dv.created_at as completed_at, 'verification' as type
+                        FROM document_verifications dv
+                        JOIN users u ON dv.user_id = u.id
+                        ORDER BY dv.created_at DESC LIMIT 100
+                    """)
+                    verifications = list(cursor.fetchall())
+                    transactions.extend(verifications)
             else:
                 cursor.execute("""
                     SELECT id, user_name, service_type, queue_number, status, wait_time_minutes, completed_at, 'queue' as type
