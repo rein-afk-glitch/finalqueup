@@ -1124,12 +1124,21 @@ Determine if this is a valid receipt for the University of San Agustin accountin
         # Optional: Secondary verification with n8n (if configured)
         n8n_verified = False
         n8n_url = os.getenv('N8N_WEBHOOK_URL')
+        n8n_api_key = os.getenv('N8N_API_KEY')
         if n8n_url:
             try:
                 # Prepare data for n8n
                 file.seek(0)
+                
+                headers = {}
+                if n8n_api_key:
+                    # Support both common ways n8n might expect the key
+                    headers['Authorization'] = f'Bearer {n8n_api_key}'
+                    headers['X-N8N-API-KEY'] = n8n_api_key
+                    
                 n8n_response = requests.post(
                     n8n_url,
+                    headers=headers,
                     data={
                         'reference_number': reference_number,
                         'account_number': account_number,

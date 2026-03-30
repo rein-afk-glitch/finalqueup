@@ -28,5 +28,12 @@ DB_NAME=<your-database-name>
 SECRET_KEY=<generate-a-strong-random-secret>
 SESSION_COOKIE_SECURE=true
 
+# Add this for Gemini receipt verification (Optional)
+GOOGLE_API_KEY=<your-gemini-api-key>
+
+# Add this for your n8n automation webhook (Required for n8n to work)
+N8N_WEBHOOK_URL=<your-published-n8n-webhook-url>
+N8N_API_KEY=<your-n8n-api-key>
+
 # Optional: if CORS still blocks, add your exact app URL:
 # CORS_ORIGINS=https://yourapp.up.railway.app
