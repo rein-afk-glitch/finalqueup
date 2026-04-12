@@ -1780,12 +1780,12 @@ function displayHistory(history) {
     } else {
         verifyTbody.innerHTML = verifications.map(trans => {
             // Check ai_verification_status first, then fall back to parsing the status string
+            let statusLower = (trans.status || '').toLowerCase();
             let isVerified = trans.ai_verification_status === 'verified' 
                 || trans.ai_verification_status === true
-                || trans.status.includes('matched') 
-                || trans.status.includes('verified') 
-                || trans.status.includes('successfully') 
-                || trans.status === 'Verified';
+                || statusLower.includes('matched') 
+                || statusLower.includes('verified') 
+                || statusLower.includes('successfully');
             let statusBadge = isVerified ? 'bg-success' : 'bg-danger';
             let statusText = isVerified ? 'Verified' : 'Not Verified';
             return `
@@ -2371,12 +2371,12 @@ function displayStudentHistory(history) {
         let statusText = trans.status;
 
         if (isVerification) {
+            const statusLower = (trans.status || '').toLowerCase();
             const isVerified = trans.ai_verification_status === 'verified'
                 || trans.ai_verification_status === true
-                || trans.status.includes('matched')
-                || trans.status.includes('verified')
-                || trans.status.includes('successfully')
-                || trans.status === 'Verified';
+                || statusLower.includes('matched')
+                || statusLower.includes('verified')
+                || statusLower.includes('successfully');
             statusBadge = isVerified ? 'bg-success' : 'bg-danger';
             statusText = isVerified ? 'Verified' : 'Not Verified';
         }
