@@ -7,7 +7,14 @@ import os
 from dotenv import load_dotenv
 import bcrypt
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
+
+# Philippine Standard Time (UTC+8)
+PHT = timezone(timedelta(hours=8))
+
+def now_pht():
+    """Return current datetime in Philippine Standard Time."""
+    return datetime.now(PHT)
 import json
 from werkzeug.utils import secure_filename
 from functools import wraps
@@ -99,6 +106,7 @@ db_config = {
     'user': os.getenv('DB_USER') or os.getenv('MYSQLUSER', 'root'),
     'password': os.getenv('DB_PASSWORD') or os.getenv('MYSQLPASSWORD', ''),
     'host': os.getenv('DB_HOST') or os.getenv('MYSQLHOST', 'localhost'),
+    'port': int(os.getenv('DB_PORT') or os.getenv('MYSQLPORT', 3306)),
     'database': os.getenv('DB_NAME') or os.getenv('MYSQLDATABASE', 'queup_db'),
     'pool_name': 'queup_pool',
     'pool_size': 32
@@ -124,7 +132,11 @@ except Exception as e:
 def get_db_connection():
     """Get database connection from pool"""
     if db_pool:
-        return db_pool.get_connection()
+        conn = db_pool.get_connection()
+        cursor = conn.cursor()
+        cursor.execute("SET time_zone = '+08:00'")
+        cursor.close()
+        return conn
     return None
 
 def init_db():
@@ -756,7 +768,7 @@ def join_queue():
                 return jsonify({'error': f'The {svc_name} queue is currently closed.'}), 400
             
             if settings['daily_limit'] is not None:
-                today = datetime.now().date()
+                today = now_pht().date()
                 cursor.execute("""
                     SELECT COUNT(*) as count FROM queue_entries 
                     WHERE service_type = %s AND DATE(created_at) = %s
@@ -787,7 +799,7 @@ def join_queue():
                 return jsonify({'error': f'You are already in the {existing["service_type"]} queue'}), 400
         
         # Generate queue number
-        today = datetime.now().date()
+        today = now_pht().date()
         cursor.execute("""
             SELECT COUNT(*) as count FROM queue_entries 
             WHERE service_type = %s AND DATE(created_at) = %s
@@ -952,8 +964,8 @@ def queue_action():
             
             # If called_at is still NULL, set it now to current time (0 min service time)
             if not queue_entry['called_at']:
-                cursor.execute("UPDATE queue_entries SET called_at = NOW() WHERE id = %s", (queue_id,))
-                queue_entry['called_at'] = datetime.now()
+                cursor.execute("UPDATE queue_entries SET called_at = CONVERT_TZ(NOW(), @@session.time_zone, '+08:00') WHERE id = %s", (queue_id,))
+                queue_entry['called_at'] = now_pht()
 
             cursor.execute("""
                 SELECT TIMESTAMPDIFF(MINUTE, created_at, NOW()) as wait_time,
@@ -1358,7 +1370,7 @@ def get_admin_stats():
     cursor = conn.cursor(dictionary=True)
     
     try:
-        today = datetime.now().date()
+        today = now_pht().date()
         admin_service = None
         if session.get('admin_type') == 'appointed':
             admin_service = session.get('admin_service')
@@ -1809,7 +1821,7 @@ def sync_service_settings(service_type):
 # Health check
 @app.route('/api/health', methods=['GET'])
 def health_check():
-    return jsonify({'status': 'healthy', 'timestamp': datetime.now().isoformat()}), 200
+    return jsonify({'status': 'healthy', 'timestamp': now_pht().isoformat()}), 200
 # Serve frontend files
 @app.route('/')
 def serve_frontend():

@@ -1618,7 +1618,7 @@ function displayHistory(history) {
                     <td>${formatServiceLabel(trans.service_type)}</td>
                     <td><span class="badge bg-success">${trans.status}</span></td>
                     <td>${trans.wait_time_minutes ? trans.wait_time_minutes + ' min' : '-'}</td>
-                    <td>${trans.completed_at ? new Date(trans.completed_at).toLocaleString() : '-'}</td>
+                    <td>${trans.completed_at ? new Date(trans.completed_at).toLocaleString('en-PH', { timeZone: 'Asia/Manila' }) : '-'}</td>
                 </tr>
             `;
         }).join('');
@@ -1644,7 +1644,7 @@ function displayHistory(history) {
                     <td>${trans.user_name}</td>
                     <td>${formatServiceLabel(trans.service_type)}</td>
                     <td><span class="badge ${statusBadge}">${statusText}</span></td>
-                    <td>${trans.completed_at ? new Date(trans.completed_at).toLocaleString() : '-'}</td>
+                    <td>${trans.completed_at ? new Date(trans.completed_at).toLocaleString('en-PH', { timeZone: 'Asia/Manila' }) : '-'}</td>
                 </tr>
             `;
         }).join('');
@@ -2234,7 +2234,7 @@ function displayStudentHistory(history) {
                 <td>${formatServiceLabel(trans.service_type)}</td>
                 <td><span class="badge ${statusBadge}">${statusText}</span></td>
                 <td>${trans.wait_time_minutes ? trans.wait_time_minutes + ' min' : '-'}</td>
-                <td>${trans.completed_at ? (function (d) { try { let date = new Date(d); if (isNaN(date.getTime())) { date = new Date(d.replace(' ', 'T')); } return date.toLocaleString(); } catch (e) { return d; } })(trans.completed_at) : '-'}</td>
+                <td>${trans.completed_at ? (function (d) { try { let date = new Date(d); if (isNaN(date.getTime())) { date = new Date(d.replace(' ', 'T')); } return date.toLocaleString('en-PH', { timeZone: 'Asia/Manila' }); } catch (e) { return d; } })(trans.completed_at) : '-'}</td>
             </tr>
         `;
     }).join('');
@@ -2358,7 +2358,7 @@ async function loadAdminList() {
                     <td>${passwordHtml}</td>
                     <td><span class="badge ${isStatic ? 'bg-dark' : 'bg-secondary'}">${isStatic ? 'Static' : 'Appointed'}</span></td>
                     <td>${roleSelect}</td>
-                    <td><small class="text-muted">${admin.created_at ? new Date(admin.created_at).toLocaleString() : '-'}</small></td>
+                    <td><small class="text-muted">${admin.created_at ? new Date(admin.created_at).toLocaleString('en-PH', { timeZone: 'Asia/Manila' }) : '-'}</small></td>
                     <td>${actions}</td>
                 </tr>
             `;
@@ -2400,7 +2400,7 @@ async function loadUserList() {
                 <tr>
                     <td>${user.name}</td>
                     <td>${user.email}</td>
-                    <td>${user.created_at ? new Date(user.created_at).toLocaleString() : '-'}</td>
+                    <td>${user.created_at ? new Date(user.created_at).toLocaleString('en-PH', { timeZone: 'Asia/Manila' }) : '-'}</td>
                     <td>
                         <button class="btn btn-sm btn-danger" data-user-action="delete-user" data-user-id="${user.id}">Delete</button>
                     </td>
