@@ -1740,7 +1740,7 @@ function formatDateTime(value) {
         if (isNaN(date.getTime())) {
             date = new Date(String(value).replace(' ', 'T'));
         }
-        return isNaN(date.getTime()) ? value : date.toLocaleString();
+        return isNaN(date.getTime()) ? value : date.toLocaleString('en-PH', { timeZone: 'Asia/Manila' });
     } catch (_) {
         return value;
     }
