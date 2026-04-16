@@ -1130,40 +1130,23 @@ def verify_receipt():
         return jsonify({'error': 'No file provided'}), 400
     
     file = request.files['file']
-    reference_number = request.form.get('reference_number')
     payment_method = request.form.get('payment_method')
+    
+    # These are now optional as they will be extracted from the image
+    reference_number = request.form.get('reference_number')
     payment_amount = request.form.get('payment_amount')
     payment_date = request.form.get('payment_date')
+    
     # Use the student_id stored in the user's account (trusted source)
     student_id = user.get('student_id', '')
     
-    if not reference_number or not payment_method or not payment_amount or not payment_date:
-        return jsonify({'error': 'Reference number, payment method, amount, and date are required'}), 400
+    if not payment_method:
+        return jsonify({'error': 'Payment method is required'}), 400
     
     if file.filename == '':
         return jsonify({'error': 'No file selected'}), 400
     
     try:
-        # 1. INTEGRITY CHECK: Check if reference number has already been used
-        conn = get_db_connection()
-        if not conn:
-             return jsonify({'error': 'Database connection failed'}), 500
-        
-        cursor = conn.cursor(dictionary=True)
-        cursor.execute("SELECT user_id FROM verified_payments WHERE reference_number = %s", (reference_number,))
-        existing_payment = cursor.fetchone()
-        
-        if existing_payment:
-            if existing_payment['user_id'] != user['id']:
-                cursor.close()
-                conn.close()
-                return jsonify({
-                    'error': 'Receipt Already Used',
-                    'message': f'This receipt (Reference No. {reference_number}) has already been used and claimed by another account. Each receipt can only be verified once.'
-                }), 400
-        cursor.close()
-        conn.close()
-
         # Read image
         image_data = file.read()
         image = Image.open(BytesIO(image_data))
@@ -1174,40 +1157,107 @@ def verify_receipt():
         confidence_score = 0.0
         verification_status = "PENDING"
         
+        n8n_url = os.getenv('N8N_WEBHOOK_URL')
+        n8n_api_key = os.getenv('N8N_API_KEY')
+        
         google_key = os.getenv('GOOGLE_API_KEY')
         if google_key:
             try:
-                model = genai.GenerativeModel('gemini-2.0-flash')
+                model = genai.GenerativeModel('gemini-3-flash-preview')
                 
-                prompt = f"""Please analyze this receipt image and verify if it matches:
-Reference Number: {reference_number}
-Student ID: {student_id}
+                prompt = f"""Analyze this receipt image for University of San Agustin payment and EXTRACT the following:
+1. Reference Number / Transaction ID (Look for: Ref No, Trace No, or similar)
+2. Exact Amount Paid
+3. Date of Payment
+4. Payment Method (GCash, Maya, Landbank, etc.)
+5. Student ID (Look for: {student_id} or ID numbers)
 
-Extract the following information:
-1. Reference Number (looking for: {reference_number})
-2. Amount paid
-3. Payment date
-4. Payment method
-5. Institution/Bank name
+Verification Goal:
+- Verify if this is a valid payment and extract the data accurately.
+- Reference number must be clearly readable.
 
-Check if the reference number on the receipt matches the provided value.
-Determine if this is a valid GCash or payment receipt for the University of San Agustin accounting office."""
+RESPOND ONLY WITH THE EXTRACTED DATA AND VERIFICATION SUMMARY."""
                 
                 response = model.generate_content([prompt, image])
                 response_text = response.text
+                print(f"--- AI Response ---\n{response_text}\n------------------")
                 
-                # Determine verification status based on reference number only
-                verified = reference_number.upper() in response_text.upper()
-                confidence_score = 95.0 if verified else 25.0
+                # Try to parse JSON from response if it exists
+                import json
+                try:
+                    # Clean the response text to find JSON
+                    # Look for JSON blocks in markdown
+                    json_matches = re.findall(r'```json\s*(\{.*?\})\s*```', response_text, re.DOTALL)
+                    if not json_matches:
+                        json_matches = re.findall(r'(\{.*?\})', response_text, re.DOTALL)
+                    
+                    if json_matches:
+                        ai_data = json.loads(json_matches[0])
+                        print(f"Parsed AI JSON: {ai_data}")
+                        if not reference_number: 
+                            reference_number = ai_data.get('reference_number') or ai_data.get('transaction_id') or ai_data.get('reference')
+                        if not payment_amount: 
+                            payment_amount = ai_data.get('amount') or ai_data.get('payment_amount')
+                        if not payment_date: 
+                            payment_date = ai_data.get('date') or ai_data.get('payment_date')
+                except Exception as e:
+                    print(f"JSON Parse Error: {e}")
+
+                # Fallback to Regex if JSON parsing failed or missed fields
+                if not reference_number:
+                    ref_matches = re.findall(r'(?i)(?:ref|trace|trans|no\.?|id)[:\s]*(\d{9,13})', response_text)
+                    if not ref_matches:
+                        ref_matches = re.findall(r'(\d{9,13})', response_text)
+                    if ref_matches:
+                        reference_number = ref_matches[0]
+                
+                # Extract amount if not provided
+                if not payment_amount:
+                    amount_matches = re.findall(r'(?i)(?:amt|amount|total|paid)[:\s]*₱?\s*([\d,]+\.?\d*)', response_text)
+                    if amount_matches:
+                        payment_amount = amount_matches[0].replace(',', '')
+
+                # Extract date if not provided
+                if not payment_date:
+                    date_matches = re.findall(r'(\d{1,2}[\s\-/]\d{1,2}[\s\-/]\d{2,4})|(\d{4}[\s\-/]\d{1,2}[\s\-/]\d{1,2})', response_text)
+                    if date_matches:
+                        payment_date = next((m for m in date_matches[0] if m), None)
+                
+                print(f"Extracted: Ref={reference_number}, Amt={payment_amount}, Date={payment_date}")
+                
+                # Update extraction logic to trust AI findings
+                verified = True if reference_number else False
+                confidence_score = 90.0 if verified else 10.0
                 verification_status = "VERIFIED" if verified else "NOT_VERIFIED"
             except Exception as ai_err:
                 response_text = f"AI Error: {str(ai_err)}"
                 print(f"Gemini AI error: {ai_err}")
+
+        # 1. INTEGRITY CHECK (Moved after extraction if needed)
+        if reference_number:
+            conn = get_db_connection()
+            if conn:
+                cursor = conn.cursor(dictionary=True)
+                cursor.execute("SELECT user_id FROM verified_payments WHERE reference_number = %s", (reference_number,))
+                existing_payment = cursor.fetchone()
+                
+                if existing_payment and existing_payment['user_id'] != user['id']:
+                    cursor.close()
+                    conn.close()
+                    return jsonify({
+                        'error': 'Receipt Already Used',
+                        'message': f'This receipt (Ref No. {reference_number}) has already been used by another account.'
+                    }), 400
+                cursor.close()
+                conn.close()
+        elif not n8n_url: # If no ref number and no n8n fallthrough, we fail
+             return jsonify({
+                'error': 'Could Not Read Receipt',
+                'message': 'Our AI could not find a clear Reference Number in the photo. Please ensure it is clearly visible and try again.'
+             }), 400
         
         # Optional: Secondary verification with n8n (if configured)
         n8n_verified = False
-        n8n_url = os.getenv('N8N_WEBHOOK_URL')
-        n8n_api_key = os.getenv('N8N_API_KEY')
         if n8n_url:
             try:
                 # Prepare data for n8n
@@ -1223,13 +1273,13 @@ Determine if this is a valid GCash or payment receipt for the University of San 
                     n8n_url,
                     headers=headers,
                     data={
-                        'reference_number': reference_number,
-                        'student_id': student_id,
-                        'payment_method': payment_method,
-                        'payment_amount': payment_amount,
-                        'payment_date': payment_date,
-                        'user_id': user['id'],
-                        'user_name': user['name']
+                        'reference_number': reference_number or "",
+                        'student_id': student_id or "",
+                        'payment_method': payment_method or "",
+                        'payment_amount': payment_amount or "",
+                        'payment_date': payment_date or "",
+                        'user_id': user.get('id', ""),
+                        'user_name': user.get('name', "")
                     },
                     files={'file': (file.filename, image_data, file.content_type)},
                     timeout=30 # Increased timeout for n8n processing

@@ -2285,10 +2285,7 @@ async function handleJoinQueue(e) {
 async function handleVerification(e) {
     e.preventDefault();
     const fileInput = document.getElementById('receipt-file');
-    const referenceNumber = document.getElementById('reference-number').value;
     const paymentMethod = document.getElementById('payment-method').value;
-    const paymentAmount = document.getElementById('payment-amount').value;
-    const paymentDate = document.getElementById('payment-date').value;
     const resultDiv = document.getElementById('verification-result');
 
     if (!fileInput.files[0]) {
@@ -2298,11 +2295,8 @@ async function handleVerification(e) {
 
     const formData = new FormData();
     formData.append('file', fileInput.files[0]);
-    formData.append('reference_number', referenceNumber);
     formData.append('payment_method', paymentMethod);
-    formData.append('payment_amount', paymentAmount);
-    formData.append('payment_date', paymentDate);
-    // account_number is now sourced from the user's account on the backend
+    // reference_number, amount, and date are now extracted by AI on the backend
 
     resultDiv.innerHTML = '<div class="alert alert-info">Verifying receipt... Please wait.</div>';
 
