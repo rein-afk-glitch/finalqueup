@@ -1489,22 +1489,20 @@ def get_transaction_history():
             cursor.execute("""
                 SELECT id, user_name, service_type, queue_number, status, wait_time_minutes, completed_at, 'queue' as type
                 FROM transaction_history 
-                WHERE user_id = %s OR user_name = %s
+                WHERE user_id = %s OR user_name = %s OR user_name = %s
                 ORDER BY completed_at DESC LIMIT 100
-            """, (user['id'], user['email']))
+            """, (user['id'], user['name'], user['email']))
             transactions = list(cursor.fetchall())
             
             cursor.execute("""
                 SELECT dv.id, %s as user_name, dv.document_type as service_type, 
                        'VERIFY' as queue_number, dv.verification_result as status, 
-                       CASE WHEN dv.confidence_score >= 50 OR dv.verification_result LIKE '%%matched%%' OR dv.verification_result LIKE '%%verified%%' OR dv.verification_result LIKE '%%successfully%%' THEN 'verified' ELSE 'not_verified' END as ai_verification_status,
+                       CASE WHEN dv.confidence_score >= 50 THEN 'verified' ELSE 'not_verified' END as ai_verification_status,
                        NULL as wait_time_minutes, dv.created_at as completed_at, 'verification' as type
                 FROM document_verifications dv
-                WHERE dv.user_id = %s OR dv.user_id IN (
-                    SELECT id FROM users WHERE email = %s
-                )
+                WHERE dv.user_id = %s
                 ORDER BY dv.created_at DESC LIMIT 100
-            """, (user['name'], user['id'], user['email']))
+            """, (user['name'], user['id']))
             verifications = list(cursor.fetchall())
             transactions.extend(verifications)
             
