@@ -238,6 +238,22 @@ def init_db():
                 INDEX idx_user_id (user_id)
             )
         """)
+
+        # Table to store officially verified payments (Integrity Check)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS verified_payments (
+                reference_number VARCHAR(50) PRIMARY KEY,
+                user_id VARCHAR(36) NOT NULL,
+                account_number VARCHAR(50) NOT NULL,
+                payment_method VARCHAR(50) NOT NULL,
+                amount DECIMAL(10, 2) NOT NULL,
+                payment_date DATE NOT NULL,
+                verification_id VARCHAR(36) NOT NULL,
+                verified_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                INDEX idx_user_id (user_id),
+                INDEX idx_reference (reference_number)
+            )
+        """)
         
         # Service settings table (Add this)
         cursor.execute("""
@@ -1115,18 +1131,39 @@ def verify_receipt():
     
     file = request.files['file']
     reference_number = request.form.get('reference_number')
-    account_number = request.form.get('account_number')
     payment_method = request.form.get('payment_method')
     payment_amount = request.form.get('payment_amount')
     payment_date = request.form.get('payment_date')
+    # Use the student_id stored in the user's account (trusted source)
+    student_id = user.get('student_id', '')
     
-    if not reference_number or not account_number or not payment_method or not payment_amount or not payment_date:
-        return jsonify({'error': 'Reference number, account number, payment method, amount, and date are required'}), 400
+    if not reference_number or not payment_method or not payment_amount or not payment_date:
+        return jsonify({'error': 'Reference number, payment method, amount, and date are required'}), 400
     
     if file.filename == '':
         return jsonify({'error': 'No file selected'}), 400
     
     try:
+        # 1. INTEGRITY CHECK: Check if reference number has already been used
+        conn = get_db_connection()
+        if not conn:
+             return jsonify({'error': 'Database connection failed'}), 500
+        
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute("SELECT user_id FROM verified_payments WHERE reference_number = %s", (reference_number,))
+        existing_payment = cursor.fetchone()
+        
+        if existing_payment:
+            if existing_payment['user_id'] != user['id']:
+                cursor.close()
+                conn.close()
+                return jsonify({
+                    'error': 'Receipt Already Used',
+                    'message': f'This receipt (Reference No. {reference_number}) has already been used and claimed by another account. Each receipt can only be verified once.'
+                }), 400
+        cursor.close()
+        conn.close()
+
         # Read image
         image_data = file.read()
         image = Image.open(BytesIO(image_data))
@@ -1144,25 +1181,23 @@ def verify_receipt():
                 
                 prompt = f"""Please analyze this receipt image and verify if it matches:
 Reference Number: {reference_number}
-Account Number: {account_number}
+Student ID: {student_id}
 
 Extract the following information:
 1. Reference Number (looking for: {reference_number})
-2. Account Number (looking for: {account_number})
-3. Amount paid
-4. Payment date
-5. Payment method
-6. Institution/Bank name
+2. Amount paid
+3. Payment date
+4. Payment method
+5. Institution/Bank name
 
-Compare the extracted reference number and account number with the provided values. 
-Determine if this is a valid receipt for the University of San Agustin accounting office."""
+Check if the reference number on the receipt matches the provided value.
+Determine if this is a valid GCash or payment receipt for the University of San Agustin accounting office."""
                 
                 response = model.generate_content([prompt, image])
                 response_text = response.text
                 
-                # Determine verification status
-                verified = (reference_number.upper() in response_text.upper() or 
-                           account_number in response_text)
+                # Determine verification status based on reference number only
+                verified = reference_number.upper() in response_text.upper()
                 confidence_score = 95.0 if verified else 25.0
                 verification_status = "VERIFIED" if verified else "NOT_VERIFIED"
             except Exception as ai_err:
@@ -1189,7 +1224,7 @@ Determine if this is a valid receipt for the University of San Agustin accountin
                     headers=headers,
                     data={
                         'reference_number': reference_number,
-                        'account_number': account_number,
+                        'student_id': student_id,
                         'payment_method': payment_method,
                         'payment_amount': payment_amount,
                         'payment_date': payment_date,
@@ -1244,7 +1279,7 @@ Determine if this is a valid receipt for the University of San Agustin accountin
             'filename': file.filename,
             'size': len(image_data),
             'reference_number': reference_number,
-            'account_number': account_number,
+            'student_id': student_id,
             'payment_method': payment_method,
             'payment_amount': payment_amount,
             'payment_date': payment_date,
@@ -1263,7 +1298,7 @@ Determine if this is a valid receipt for the University of San Agustin accountin
         history_queue_number = reference_number or f'AI-{verification_id[:8]}'
         history_notes = (
             f"Receipt verification ({verification_status}). Ref: {reference_number}, "
-            f"Account: {account_number}, Method: {payment_method}, "
+            f"Student ID: {student_id}, Method: {payment_method}, "
             f"Amount: {payment_amount}, Date: {payment_date}"
         )
         cursor.execute("""
@@ -1285,6 +1320,31 @@ Determine if this is a valid receipt for the University of San Agustin accountin
             history_notes
         ))
         
+        # If verified, save to verified_payments table to prevent future reuse by others
+        if verified:
+            try:
+                cursor.execute("""
+                    INSERT INTO verified_payments 
+                    (reference_number, user_id, account_number, payment_method, amount, payment_date, verification_id)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s)
+                    ON DUPLICATE KEY UPDATE
+                        user_id = VALUES(user_id),
+                        account_number = VALUES(account_number),
+                        verification_id = VALUES(verification_id)
+                """, (
+                    reference_number,
+                    user['id'],
+                    student_id,  # store student_id in account_number column
+                    payment_method,
+                    payment_amount,
+                    payment_date,
+                    verification_id
+                ))
+            except mysql.connector.Error as db_err:
+                print(f"Error saving to verified_payments: {db_err}")
+                # We don't fail the request here as the history was already saved, 
+                # but we should log it.
+
         conn.commit()
         cursor.close()
         conn.close()
@@ -1373,12 +1433,13 @@ def get_transaction_history():
             transactions = list(cursor.fetchall())
             
             cursor.execute("""
-                SELECT id, %s as user_name, document_type as service_type, 
-                       'VERIFY' as queue_number, verification_result as status, 
-                       NULL as wait_time_minutes, created_at as completed_at, 'verification' as type
-                FROM document_verifications 
-                WHERE user_id = %s
-                ORDER BY created_at DESC LIMIT 100
+                SELECT dv.id, %s as user_name, dv.document_type as service_type, 
+                       'VERIFY' as queue_number, dv.verification_result as status, 
+                       CASE WHEN dv.confidence_score >= 50 OR dv.verification_result LIKE '%%matched%%' OR dv.verification_result LIKE '%%verified%%' OR dv.verification_result LIKE '%%successfully%%' THEN 'verified' ELSE 'not_verified' END as ai_verification_status,
+                       NULL as wait_time_minutes, dv.created_at as completed_at, 'verification' as type
+                FROM document_verifications dv
+                WHERE dv.user_id = %s
+                ORDER BY dv.created_at DESC LIMIT 100
             """, (user['name'], user['id']))
             verifications = list(cursor.fetchall())
             transactions.extend(verifications)

@@ -2286,7 +2286,6 @@ async function handleVerification(e) {
     e.preventDefault();
     const fileInput = document.getElementById('receipt-file');
     const referenceNumber = document.getElementById('reference-number').value;
-    const accountNumber = document.getElementById('account-number').value;
     const paymentMethod = document.getElementById('payment-method').value;
     const paymentAmount = document.getElementById('payment-amount').value;
     const paymentDate = document.getElementById('payment-date').value;
@@ -2300,10 +2299,10 @@ async function handleVerification(e) {
     const formData = new FormData();
     formData.append('file', fileInput.files[0]);
     formData.append('reference_number', referenceNumber);
-    formData.append('account_number', accountNumber);
     formData.append('payment_method', paymentMethod);
     formData.append('payment_amount', paymentAmount);
     formData.append('payment_date', paymentDate);
+    // account_number is now sourced from the user's account on the backend
 
     resultDiv.innerHTML = '<div class="alert alert-info">Verifying receipt... Please wait.</div>';
 
@@ -2317,7 +2316,10 @@ async function handleVerification(e) {
         const data = await response.json();
 
         if (response.ok) {
-            const isVerified = data.confidence_score >= 90;
+            // n8n sets confidence_score = 100 on verified, 0 on rejected
+            // Fall back to >= 90 if n8n is not configured (Gemini-only path)
+            const n8nVerified = data.extracted_data?.n8n_verified === true;
+            const isVerified = n8nVerified || data.confidence_score >= 90;
             const statusBadge = isVerified
                 ? '<span class="badge bg-success">VERIFIED</span>'
                 : '<span class="badge bg-danger">NOT VERIFIED</span>';
@@ -2329,7 +2331,18 @@ async function handleVerification(e) {
                 </div>
             `;
         } else {
-            resultDiv.innerHTML = `<div class="alert alert-danger">${data.error || 'Verification failed'}</div>`;
+            const isReceiptUsed = data.error === 'Receipt Already Used';
+            const icon = isReceiptUsed ? 'bi-receipt-cutoff' : 'bi-exclamation-circle-fill';
+            const title = data.error || 'Verification Failed';
+            const detail = data.message || '';
+            resultDiv.innerHTML = `
+                <div class="alert alert-danger d-flex align-items-start gap-2">
+                    <i class="bi ${icon} fs-4 mt-1 flex-shrink-0"></i>
+                    <div>
+                        <strong>${title}</strong>
+                        ${detail ? `<p class="mb-0 mt-1 small">${detail}</p>` : ''}
+                    </div>
+                </div>`;
         }
     } catch (error) {
         resultDiv.innerHTML = '<div class="alert alert-danger">Connection error. Please try again.</div>';
