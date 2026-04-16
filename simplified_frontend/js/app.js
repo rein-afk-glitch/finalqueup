@@ -34,6 +34,9 @@ let vapidPublicKey = null;
 
 const NOTIFICATION_ICON = 'images/university-logo.png';
 const NOTIFICATION_PROMPT_KEY = 'queup_notification_prompted';
+const PERMISSIONS_PROMPT_KEY = 'queup_permissions_prompted';
+const VIBRATION_PERMISSION_KEY = 'queup_vibration_allowed';
+const NOTIFICATION_ALLOWED_KEY = 'queup_notifications_allowed';
 
 const SERVICE_TYPES = [
     'submission_of_application_forms',
@@ -54,7 +57,8 @@ const SERVICE_LABELS = {
     faculty_tagging_room_assignments: 'Faculty Tagging & Room Assignments',
     payment: 'Payment',
     balance_inquiry: 'Balance Inquiry',
-    claims: 'Claims'
+    claims: 'Claims',
+    receipt_verification: 'Receipt Verification'
 };
 
 const ADMIN_SERVICE_LABELS = SERVICE_LABELS;
@@ -317,6 +321,9 @@ function setupEventListeners() {
         studentHistoryTab.addEventListener('click', () => {
              if (typeof loadStudentHistory === 'function') setTimeout(loadStudentHistory, 50);
         });
+        studentHistoryTab.addEventListener('shown.bs.tab', () => {
+             if (typeof loadStudentHistory === 'function') loadStudentHistory();
+        });
     }
     const historyPanel = document.getElementById('student-history-panel');
     if (historyPanel) {
@@ -348,6 +355,58 @@ function setupEventListeners() {
             const modalEl = document.getElementById('notification-permission-modal');
             const modal = modalEl ? bootstrap.Modal.getInstance(modalEl) : null;
             if (modal) modal.hide();
+        });
+    }
+
+    const saveInitialPermissionsBtn = document.getElementById('save-initial-permissions-btn');
+    if (saveInitialPermissionsBtn) {
+        saveInitialPermissionsBtn.addEventListener('click', async () => {
+            const notifToggle = document.getElementById('initial-permission-notifications');
+            const vibrationToggle = document.getElementById('initial-permission-vibration');
+            markPromptedInitialPermissions();
+
+            if (notifToggle) {
+                if (notifToggle.checked) {
+                    const permission = await requestNotificationPermission();
+                    localStorage.setItem(NOTIFICATION_ALLOWED_KEY, permission === 'granted' ? '1' : '0');
+                    if (permission === 'granted') {
+                        await ensurePushSubscription();
+                    }
+                } else {
+                    localStorage.setItem(NOTIFICATION_ALLOWED_KEY, '0');
+                    localStorage.setItem(NOTIFICATION_PROMPT_KEY, '1');
+                }
+            }
+
+            if (vibrationToggle) {
+                setVibrationAllowed(vibrationToggle.checked);
+            }
+
+            renderNotificationPermissionBanner();
+            const modalEl = document.getElementById('initial-permissions-modal');
+            const modal = modalEl ? bootstrap.Modal.getInstance(modalEl) : null;
+            if (modal) modal.hide();
+        });
+    }
+
+    const dismissInitialPermissionsBtn = document.getElementById('initial-permissions-dismiss-btn');
+    if (dismissInitialPermissionsBtn) {
+        dismissInitialPermissionsBtn.addEventListener('click', () => {
+            markPromptedInitialPermissions();
+            localStorage.setItem(NOTIFICATION_PROMPT_KEY, '1');
+            setVibrationAllowed(false);
+            renderNotificationPermissionBanner();
+        });
+    }
+
+    const initialPermissionsModal = document.getElementById('initial-permissions-modal');
+    if (initialPermissionsModal) {
+        initialPermissionsModal.addEventListener('hidden.bs.modal', () => {
+            if (!hasPromptedInitialPermissions()) {
+                markPromptedInitialPermissions();
+                localStorage.setItem(NOTIFICATION_PROMPT_KEY, '1');
+                setVibrationAllowed(false);
+            }
         });
     }
 
@@ -445,6 +504,10 @@ function setupEventListeners() {
 
             // Set the hidden input value
             document.getElementById('priority').value = priority;
+
+            if (priority === 'senior_pwd') {
+                alert('Reminder: Please bring your Senior Citizen or PWD ID and present it at the counter for verification.');
+            }
 
             // Check if both service and priority are selected, then submit
             const service = document.getElementById('service-type').value;
@@ -855,8 +918,71 @@ async function initNotificationSupport() {
     renderNotificationPermissionBanner();
 }
 
+function hasPromptedInitialPermissions() {
+    return localStorage.getItem(PERMISSIONS_PROMPT_KEY) === '1';
+}
+
+function markPromptedInitialPermissions() {
+    localStorage.setItem(PERMISSIONS_PROMPT_KEY, '1');
+}
+
 function hasPromptedNotifications() {
     return localStorage.getItem(NOTIFICATION_PROMPT_KEY) === '1';
+}
+
+function isVibrationAllowed() {
+    return localStorage.getItem(VIBRATION_PERMISSION_KEY) === '1';
+}
+
+function setVibrationAllowed(allowed) {
+    localStorage.setItem(VIBRATION_PERMISSION_KEY, allowed ? '1' : '0');
+}
+
+function maybePromptInitialPermissions() {
+    if (hasPromptedInitialPermissions()) return;
+    if (currentUser?.role !== 'student') return;
+    const modalEl = document.getElementById('initial-permissions-modal');
+    if (!modalEl) return;
+
+    const notifToggle = modalEl.querySelector('#initial-permission-notifications');
+    const vibrationToggle = modalEl.querySelector('#initial-permission-vibration');
+    const notifHelp = modalEl.querySelector('#initial-notification-help');
+    const vibrationHelp = modalEl.querySelector('#initial-vibration-help');
+
+    if (notifToggle) {
+        const permission = getNotificationPermission();
+        const canRequest = canRequestNotifications();
+        const supported = permission !== 'unsupported';
+        notifToggle.checked = permission === 'default' || permission === 'granted';
+        notifToggle.disabled = permission === 'denied' || !supported || !canRequest;
+        if (notifHelp) {
+            if (!supported) {
+                notifHelp.textContent = 'Notifications are not supported on this browser.';
+            } else if (!canRequest) {
+                notifHelp.textContent = 'Notifications require HTTPS to enable.';
+            } else if (permission === 'granted') {
+                notifHelp.textContent = 'Notifications are already enabled.';
+            } else if (permission === 'denied') {
+                notifHelp.textContent = 'Notifications are blocked in your browser settings.';
+            } else {
+                notifHelp.textContent = 'Get alerts when your queue is almost ready.';
+            }
+        }
+    }
+
+    if (vibrationToggle) {
+        const supported = !!navigator.vibrate;
+        vibrationToggle.checked = supported;
+        vibrationToggle.disabled = !supported;
+        if (vibrationHelp) {
+            vibrationHelp.textContent = supported
+                ? 'Use vibration for queue alerts.'
+                : 'Vibration is not supported on this device.';
+        }
+    }
+
+    const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+    modal.show();
 }
 
 function needsNotificationPrompt() {
@@ -940,7 +1066,8 @@ function renderNotificationPermissionBanner() {
     const permission = getNotificationPermission();
     const unsupported = permission === 'unsupported';
     const dismissed = permission === 'default' && hasPromptedNotifications();
-    const shouldShow = needsNotificationPrompt() || isNotificationDenied() || unsupported || dismissed;
+    const initialPrompted = hasPromptedInitialPermissions();
+    const shouldShow = initialPrompted && (needsNotificationPrompt() || isNotificationDenied() || unsupported || dismissed);
 
     if (!shouldShow) {
         if (existing) existing.remove();
@@ -1043,12 +1170,6 @@ async function handleLogin(e) {
     const email = document.getElementById('login-email').value;
     const password = document.getElementById('login-password').value;
     const errorDiv = document.getElementById('login-error');
-
-    // Request permissions in direct user gesture before async work
-    const permission = await requestNotificationPermission();
-    if (permission === 'granted') {
-        await ensurePushSubscription();
-    }
 
     try {
         const response = await fetch(`${API_BASE}/auth/login`, {
@@ -1410,6 +1531,7 @@ async function loadHistory() {
         }
     } catch (error) {
         console.error('Failed to load history:', error);
+        displayHistory([]);
     }
 }
 
@@ -1597,6 +1719,33 @@ function renderAnalyticsCharts(data) {
     }
 }
 
+function formatHistoryStatusBadge(status) {
+    const normalized = (status || '').toString().trim().toLowerCase();
+    let badgeClass = 'bg-secondary';
+    if (['completed', 'verified', 'success'].includes(normalized)) {
+        badgeClass = 'bg-success';
+    } else if (['not_verified', 'failed', 'denied', 'no_show'].includes(normalized) || normalized.includes('not')) {
+        badgeClass = 'bg-danger';
+    } else if (['waiting', 'called', 'serving', 'pending'].includes(normalized)) {
+        badgeClass = 'bg-warning text-dark';
+    }
+    const label = status || 'Unknown';
+    return `<span class="badge ${badgeClass}">${label}</span>`;
+}
+
+function formatDateTime(value) {
+    if (!value) return '-';
+    try {
+        let date = new Date(value);
+        if (isNaN(date.getTime())) {
+            date = new Date(String(value).replace(' ', 'T'));
+        }
+        return isNaN(date.getTime()) ? value : date.toLocaleString();
+    } catch (_) {
+        return value;
+    }
+}
+
 // Display history
 function displayHistory(history) {
     const tbody = document.getElementById('history-tbody');
@@ -1631,12 +1780,12 @@ function displayHistory(history) {
     } else {
         verifyTbody.innerHTML = verifications.map(trans => {
             // Check ai_verification_status first, then fall back to parsing the status string
+            let statusLower = (trans.status || '').toLowerCase();
             let isVerified = trans.ai_verification_status === 'verified' 
                 || trans.ai_verification_status === true
-                || trans.status.includes('matched') 
-                || trans.status.includes('verified') 
-                || trans.status.includes('successfully') 
-                || trans.status === 'Verified';
+                || statusLower.includes('matched') 
+                || statusLower.includes('verified') 
+                || statusLower.includes('successfully');
             let statusBadge = isVerified ? 'bg-success' : 'bg-danger';
             let statusText = isVerified ? 'Verified' : 'Not Verified';
             return `
@@ -1874,7 +2023,7 @@ function triggerPositionNotification(queueNumber, serviceLabel, count) {
 
     showQueueNotification(title, body, `queup-${queueNumber}-away-${count}`);
 
-    if (navigator.vibrate) {
+    if (navigator.vibrate && isVibrationAllowed()) {
         navigator.vibrate([200, 100, 200, 100, 200]);
     }
 
@@ -2029,7 +2178,7 @@ function triggerQueueCalledAlert(queue) {
     const message = `Queue ${queue.queue_number} (${label}) ${statusText}`;
     let vibrated = false;
 
-    if (navigator.vibrate) {
+    if (navigator.vibrate && isVibrationAllowed()) {
         vibrated = navigator.vibrate([300, 150, 300, 150, 300]);
     }
 
@@ -2136,11 +2285,7 @@ async function handleJoinQueue(e) {
 async function handleVerification(e) {
     e.preventDefault();
     const fileInput = document.getElementById('receipt-file');
-    const referenceNumber = document.getElementById('reference-number').value;
-    const accountNumber = document.getElementById('account-number').value;
     const paymentMethod = document.getElementById('payment-method').value;
-    const paymentAmount = document.getElementById('payment-amount').value;
-    const paymentDate = document.getElementById('payment-date').value;
     const resultDiv = document.getElementById('verification-result');
 
     if (!fileInput.files[0]) {
@@ -2150,11 +2295,8 @@ async function handleVerification(e) {
 
     const formData = new FormData();
     formData.append('file', fileInput.files[0]);
-    formData.append('reference_number', referenceNumber);
-    formData.append('account_number', accountNumber);
     formData.append('payment_method', paymentMethod);
-    formData.append('payment_amount', paymentAmount);
-    formData.append('payment_date', paymentDate);
+    // reference_number, amount, and date are now extracted by AI on the backend
 
     resultDiv.innerHTML = '<div class="alert alert-info">Verifying receipt... Please wait.</div>';
 
@@ -2168,7 +2310,10 @@ async function handleVerification(e) {
         const data = await response.json();
 
         if (response.ok) {
-            const isVerified = data.confidence_score >= 90;
+            // n8n sets confidence_score = 100 on verified, 0 on rejected
+            // Fall back to >= 90 if n8n is not configured (Gemini-only path)
+            const n8nVerified = data.extracted_data?.n8n_verified === true;
+            const isVerified = n8nVerified || data.confidence_score >= 90;
             const statusBadge = isVerified
                 ? '<span class="badge bg-success">VERIFIED</span>'
                 : '<span class="badge bg-danger">NOT VERIFIED</span>';
@@ -2180,7 +2325,18 @@ async function handleVerification(e) {
                 </div>
             `;
         } else {
-            resultDiv.innerHTML = `<div class="alert alert-danger">${data.error || 'Verification failed'}</div>`;
+            const isReceiptUsed = data.error === 'Receipt Already Used';
+            const icon = isReceiptUsed ? 'bi-receipt-cutoff' : 'bi-exclamation-circle-fill';
+            const title = data.error || 'Verification Failed';
+            const detail = data.message || '';
+            resultDiv.innerHTML = `
+                <div class="alert alert-danger d-flex align-items-start gap-2">
+                    <i class="bi ${icon} fs-4 mt-1 flex-shrink-0"></i>
+                    <div>
+                        <strong>${title}</strong>
+                        ${detail ? `<p class="mb-0 mt-1 small">${detail}</p>` : ''}
+                    </div>
+                </div>`;
         }
     } catch (error) {
         resultDiv.innerHTML = '<div class="alert alert-danger">Connection error. Please try again.</div>';
@@ -2197,17 +2353,21 @@ async function loadStudentHistory() {
         if (response.ok) {
             const history = await response.json();
             displayStudentHistory(history);
+        } else {
+            displayStudentHistory([]);
         }
     } catch (error) {
         console.error('Failed to load history:', error);
+        displayStudentHistory([]);
     }
 }
 
 // Display student history
 function displayStudentHistory(history) {
     const tbody = document.getElementById('student-history-tbody');
+    if (!tbody) return;
 
-    if (history.length === 0) {
+    if (!Array.isArray(history) || history.length === 0) {
         tbody.innerHTML = '<tr><td colspan="5" class="text-center">No transaction history</td></tr>';
         return;
     }
@@ -2218,12 +2378,12 @@ function displayStudentHistory(history) {
         let statusText = trans.status;
 
         if (isVerification) {
+            const statusLower = (trans.status || '').toLowerCase();
             const isVerified = trans.ai_verification_status === 'verified'
                 || trans.ai_verification_status === true
-                || trans.status.includes('matched')
-                || trans.status.includes('verified')
-                || trans.status.includes('successfully')
-                || trans.status === 'Verified';
+                || statusLower.includes('matched')
+                || statusLower.includes('verified')
+                || statusLower.includes('successfully');
             statusBadge = isVerified ? 'bg-success' : 'bg-danger';
             statusText = isVerified ? 'Verified' : 'Not Verified';
         }
@@ -2234,7 +2394,7 @@ function displayStudentHistory(history) {
                 <td>${formatServiceLabel(trans.service_type)}</td>
                 <td><span class="badge ${statusBadge}">${statusText}</span></td>
                 <td>${trans.wait_time_minutes ? trans.wait_time_minutes + ' min' : '-'}</td>
-                <td>${trans.completed_at ? (function (d) { try { let date = new Date(d); if (isNaN(date.getTime())) { date = new Date(d.replace(' ', 'T')); } return date.toLocaleString('en-PH', { timeZone: 'Asia/Manila' }); } catch (e) { return d; } })(trans.completed_at) : '-'}</td>
+                <td>${formatDateTime(trans.completed_at)}</td>
             </tr>
         `;
     }).join('');

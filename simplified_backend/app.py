@@ -250,6 +250,22 @@ def init_db():
                 INDEX idx_user_id (user_id)
             )
         """)
+
+        # Table to store officially verified payments (Integrity Check)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS verified_payments (
+                reference_number VARCHAR(50) PRIMARY KEY,
+                user_id VARCHAR(36) NOT NULL,
+                account_number VARCHAR(50) NOT NULL,
+                payment_method VARCHAR(50) NOT NULL,
+                amount DECIMAL(10, 2) NOT NULL,
+                payment_date DATE NOT NULL,
+                verification_id VARCHAR(36) NOT NULL,
+                verified_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                INDEX idx_user_id (user_id),
+                INDEX idx_reference (reference_number)
+            )
+        """)
         
         # Service settings table (Add this)
         cursor.execute("""
@@ -409,6 +425,31 @@ def parse_queue_numeric(queue_number):
     match = re.search(r'(\d+)$', str(queue_number))
     return int(match.group(1)) if match else None
 
+def mix_priority_waiting(waiting_entries):
+    regular = [entry for entry in waiting_entries if entry.get('priority') != 'senior_pwd']
+    senior = [entry for entry in waiting_entries if entry.get('priority') == 'senior_pwd']
+    mixed = []
+    reg_idx = 0
+    sen_idx = 0
+
+    while reg_idx < len(regular) or sen_idx < len(senior):
+        for _ in range(3):
+            if reg_idx < len(regular):
+                mixed.append(regular[reg_idx])
+                reg_idx += 1
+        if sen_idx < len(senior):
+            mixed.append(senior[sen_idx])
+            sen_idx += 1
+        if reg_idx >= len(regular) and sen_idx < len(senior):
+            mixed.extend(senior[sen_idx:])
+            break
+    return mixed
+
+def order_queue_entries(entries):
+    waiting = [entry for entry in entries if entry.get('status') == 'waiting']
+    active = [entry for entry in entries if entry.get('status') != 'waiting']
+    return active + mix_priority_waiting(waiting)
+
 def get_user_subscriptions(user_id):
     conn = get_db_connection()
     if not conn:
@@ -553,16 +594,15 @@ def notify_five_away_for_service(service_type):
         current = cursor.fetchone()
         if not current:
             return
-        current_number = parse_queue_numeric(current.get('queue_number'))
-        if current_number is None:
-            return
-        target_number = current_number + 5
-
         cursor.execute("""
             SELECT * FROM queue_entries
-            WHERE status = 'waiting' AND service_type = %s AND notified_five_away = 0
+            WHERE status = 'waiting' AND service_type = %s
+            ORDER BY created_at ASC
         """, (service_type,))
         waiting = cursor.fetchall()
+        mixed_waiting = mix_priority_waiting(waiting)
+        if len(mixed_waiting) < 5:
+            return
 
         for entry in waiting:
             entry_number = parse_queue_numeric(entry.get('queue_number'))
@@ -874,8 +914,20 @@ def get_queue_status():
         entries = cursor.fetchall()
         cursor.close()
         conn.close()
-        
-        return jsonify(entries), 200
+
+        if service_type:
+            ordered = order_queue_entries(entries)
+        else:
+            grouped = {}
+            for entry in entries:
+                grouped.setdefault(entry.get('service_type'), []).append(entry)
+            ordered = []
+            for svc in SERVICE_TYPES:
+                if svc in grouped:
+                    ordered.extend(order_queue_entries(grouped.pop(svc)))
+            for svc_entries in grouped.values():
+                ordered.extend(order_queue_entries(svc_entries))
+        return jsonify(ordered), 200
     except mysql.connector.Error as err:
         cursor.close()
         conn.close()
@@ -1090,14 +1142,18 @@ def verify_receipt():
         return jsonify({'error': 'No file provided'}), 400
     
     file = request.files['file']
-    reference_number = request.form.get('reference_number')
-    account_number = request.form.get('account_number')
     payment_method = request.form.get('payment_method')
+    
+    # These are now optional as they will be extracted from the image
+    reference_number = request.form.get('reference_number')
     payment_amount = request.form.get('payment_amount')
     payment_date = request.form.get('payment_date')
     
-    if not reference_number or not account_number or not payment_method or not payment_amount or not payment_date:
-        return jsonify({'error': 'Reference number, account number, payment method, amount, and date are required'}), 400
+    # Use the student_id stored in the user's account (trusted source)
+    student_id = user.get('student_id', '')
+    
+    if not payment_method:
+        return jsonify({'error': 'Payment method is required'}), 400
     
     if file.filename == '':
         return jsonify({'error': 'No file selected'}), 400
@@ -1113,42 +1169,107 @@ def verify_receipt():
         confidence_score = 0.0
         verification_status = "PENDING"
         
+        n8n_url = os.getenv('N8N_WEBHOOK_URL')
+        n8n_api_key = os.getenv('N8N_API_KEY')
+        
         google_key = os.getenv('GOOGLE_API_KEY')
         if google_key:
             try:
-                model = genai.GenerativeModel('gemini-2.0-flash')
+                model = genai.GenerativeModel('gemini-3-flash-preview')
                 
-                prompt = f"""Please analyze this receipt image and verify if it matches:
-Reference Number: {reference_number}
-Account Number: {account_number}
+                prompt = f"""Analyze this receipt image for University of San Agustin payment and EXTRACT the following:
+1. Reference Number / Transaction ID (Look for: Ref No, Trace No, or similar)
+2. Exact Amount Paid
+3. Date of Payment
+4. Payment Method (GCash, Maya, Landbank, etc.)
+5. Student ID (Look for: {student_id} or ID numbers)
 
-Extract the following information:
-1. Reference Number (looking for: {reference_number})
-2. Account Number (looking for: {account_number})
-3. Amount paid
-4. Payment date
-5. Payment method
-6. Institution/Bank name
+Verification Goal:
+- Verify if this is a valid payment and extract the data accurately.
+- Reference number must be clearly readable.
 
-Compare the extracted reference number and account number with the provided values. 
-Determine if this is a valid receipt for the University of San Agustin accounting office."""
+RESPOND ONLY WITH THE EXTRACTED DATA AND VERIFICATION SUMMARY."""
                 
                 response = model.generate_content([prompt, image])
                 response_text = response.text
+                print(f"--- AI Response ---\n{response_text}\n------------------")
                 
-                # Determine verification status
-                verified = (reference_number.upper() in response_text.upper() or 
-                           account_number in response_text)
-                confidence_score = 95.0 if verified else 25.0
+                # Try to parse JSON from response if it exists
+                import json
+                try:
+                    # Clean the response text to find JSON
+                    # Look for JSON blocks in markdown
+                    json_matches = re.findall(r'```json\s*(\{.*?\})\s*```', response_text, re.DOTALL)
+                    if not json_matches:
+                        json_matches = re.findall(r'(\{.*?\})', response_text, re.DOTALL)
+                    
+                    if json_matches:
+                        ai_data = json.loads(json_matches[0])
+                        print(f"Parsed AI JSON: {ai_data}")
+                        if not reference_number: 
+                            reference_number = ai_data.get('reference_number') or ai_data.get('transaction_id') or ai_data.get('reference')
+                        if not payment_amount: 
+                            payment_amount = ai_data.get('amount') or ai_data.get('payment_amount')
+                        if not payment_date: 
+                            payment_date = ai_data.get('date') or ai_data.get('payment_date')
+                except Exception as e:
+                    print(f"JSON Parse Error: {e}")
+
+                # Fallback to Regex if JSON parsing failed or missed fields
+                if not reference_number:
+                    ref_matches = re.findall(r'(?i)(?:ref|trace|trans|no\.?|id)[:\s]*(\d{9,13})', response_text)
+                    if not ref_matches:
+                        ref_matches = re.findall(r'(\d{9,13})', response_text)
+                    if ref_matches:
+                        reference_number = ref_matches[0]
+                
+                # Extract amount if not provided
+                if not payment_amount:
+                    amount_matches = re.findall(r'(?i)(?:amt|amount|total|paid)[:\s]*₱?\s*([\d,]+\.?\d*)', response_text)
+                    if amount_matches:
+                        payment_amount = amount_matches[0].replace(',', '')
+
+                # Extract date if not provided
+                if not payment_date:
+                    date_matches = re.findall(r'(\d{1,2}[\s\-/]\d{1,2}[\s\-/]\d{2,4})|(\d{4}[\s\-/]\d{1,2}[\s\-/]\d{1,2})', response_text)
+                    if date_matches:
+                        payment_date = next((m for m in date_matches[0] if m), None)
+                
+                print(f"Extracted: Ref={reference_number}, Amt={payment_amount}, Date={payment_date}")
+                
+                # Update extraction logic to trust AI findings
+                verified = True if reference_number else False
+                confidence_score = 90.0 if verified else 10.0
                 verification_status = "VERIFIED" if verified else "NOT_VERIFIED"
             except Exception as ai_err:
                 response_text = f"AI Error: {str(ai_err)}"
                 print(f"Gemini AI error: {ai_err}")
+
+        # 1. INTEGRITY CHECK (Moved after extraction if needed)
+        if reference_number:
+            conn = get_db_connection()
+            if conn:
+                cursor = conn.cursor(dictionary=True)
+                cursor.execute("SELECT user_id FROM verified_payments WHERE reference_number = %s", (reference_number,))
+                existing_payment = cursor.fetchone()
+                
+                if existing_payment and existing_payment['user_id'] != user['id']:
+                    cursor.close()
+                    conn.close()
+                    return jsonify({
+                        'error': 'Receipt Already Used',
+                        'message': f'This receipt (Ref No. {reference_number}) has already been used by another account.'
+                    }), 400
+                cursor.close()
+                conn.close()
+        elif not n8n_url: # If no ref number and no n8n fallthrough, we fail
+             return jsonify({
+                'error': 'Could Not Read Receipt',
+                'message': 'Our AI could not find a clear Reference Number in the photo. Please ensure it is clearly visible and try again.'
+             }), 400
         
         # Optional: Secondary verification with n8n (if configured)
         n8n_verified = False
-        n8n_url = os.getenv('N8N_WEBHOOK_URL')
-        n8n_api_key = os.getenv('N8N_API_KEY')
         if n8n_url:
             try:
                 # Prepare data for n8n
@@ -1164,13 +1285,13 @@ Determine if this is a valid receipt for the University of San Agustin accountin
                     n8n_url,
                     headers=headers,
                     data={
-                        'reference_number': reference_number,
-                        'account_number': account_number,
-                        'payment_method': payment_method,
-                        'payment_amount': payment_amount,
-                        'payment_date': payment_date,
-                        'user_id': user['id'],
-                        'user_name': user['name']
+                        'reference_number': reference_number or "",
+                        'student_id': student_id or "",
+                        'payment_method': payment_method or "",
+                        'payment_amount': payment_amount or "",
+                        'payment_date': payment_date or "",
+                        'user_id': user.get('id', ""),
+                        'user_name': user.get('name', "")
                     },
                     files={'file': (file.filename, image_data, file.content_type)},
                     timeout=30 # Increased timeout for n8n processing
@@ -1220,7 +1341,7 @@ Determine if this is a valid receipt for the University of San Agustin accountin
             'filename': file.filename,
             'size': len(image_data),
             'reference_number': reference_number,
-            'account_number': account_number,
+            'student_id': student_id,
             'payment_method': payment_method,
             'payment_amount': payment_amount,
             'payment_date': payment_date,
@@ -1234,7 +1355,58 @@ Determine if this is a valid receipt for the University of San Agustin accountin
             (id, user_id, document_type, verification_result, confidence_score, extracted_data)
             VALUES (%s, %s, %s, %s, %s, %s)
         """, (verification_id, user['id'], 'payment_receipt', response_text, confidence_score, extracted_data))
+
+        history_status = 'verified' if verification_status == 'VERIFIED' else 'not_verified'
+        history_queue_number = reference_number or f'AI-{verification_id[:8]}'
+        history_notes = (
+            f"Receipt verification ({verification_status}). Ref: {reference_number}, "
+            f"Student ID: {student_id}, Method: {payment_method}, "
+            f"Amount: {payment_amount}, Date: {payment_date}"
+        )
+        cursor.execute("""
+            INSERT INTO transaction_history
+            (id, user_id, user_name, service_type, queue_number, priority, status, wait_time_minutes,
+             service_time_minutes, served_by, notes, completed_at)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
+        """, (
+            str(uuid.uuid4()),
+            user['id'],
+            user['name'],
+            'receipt_verification',
+            history_queue_number,
+            'regular',
+            history_status,
+            None,
+            None,
+            'AI Verification',
+            history_notes
+        ))
         
+        # If verified, save to verified_payments table to prevent future reuse by others
+        if verified:
+            try:
+                cursor.execute("""
+                    INSERT INTO verified_payments 
+                    (reference_number, user_id, account_number, payment_method, amount, payment_date, verification_id)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s)
+                    ON DUPLICATE KEY UPDATE
+                        user_id = VALUES(user_id),
+                        account_number = VALUES(account_number),
+                        verification_id = VALUES(verification_id)
+                """, (
+                    reference_number,
+                    user['id'],
+                    student_id,  # store student_id in account_number column
+                    payment_method,
+                    payment_amount,
+                    payment_date,
+                    verification_id
+                ))
+            except mysql.connector.Error as db_err:
+                print(f"Error saving to verified_payments: {db_err}")
+                # We don't fail the request here as the history was already saved, 
+                # but we should log it.
+
         conn.commit()
         cursor.close()
         conn.close()
@@ -1323,12 +1495,13 @@ def get_transaction_history():
             transactions = list(cursor.fetchall())
             
             cursor.execute("""
-                SELECT id, %s as user_name, document_type as service_type, 
-                       'VERIFY' as queue_number, verification_result as status, 
-                       NULL as wait_time_minutes, created_at as completed_at, 'verification' as type
-                FROM document_verifications 
-                WHERE user_id = %s
-                ORDER BY created_at DESC LIMIT 100
+                SELECT dv.id, %s as user_name, dv.document_type as service_type, 
+                       'VERIFY' as queue_number, dv.verification_result as status, 
+                       CASE WHEN dv.confidence_score >= 50 OR dv.verification_result LIKE '%%matched%%' OR dv.verification_result LIKE '%%verified%%' OR dv.verification_result LIKE '%%successfully%%' THEN 'verified' ELSE 'not_verified' END as ai_verification_status,
+                       NULL as wait_time_minutes, dv.created_at as completed_at, 'verification' as type
+                FROM document_verifications dv
+                WHERE dv.user_id = %s
+                ORDER BY dv.created_at DESC LIMIT 100
             """, (user['name'], user['id']))
             verifications = list(cursor.fetchall())
             transactions.extend(verifications)
